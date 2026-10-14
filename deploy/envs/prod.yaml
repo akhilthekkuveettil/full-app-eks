@@ -1,12 +1,12 @@
 # Values for the app chart in production. CI updates the digests.
 backends:
-  backend1: { digest: "sha256:d3cf89584420d0fc566a12a520624c2ca3de97f8e6eaef75d8b046a52b44c704" }
-  backend2: { digest: "sha256:92fbc40c4a43272d8585a4059e69f2eea0c0141613ec3696482ac8e72b56541d" }
-  backend3: { digest: "sha256:41e2d149096ac5a43e8ce41c2734fb747bff3ec83c35d353af99dcf428435a38" }
-  backend4: { digest: "sha256:d15d4e6c3c1a60de191f83711e61b5d6e69dc15f8b52c32fc9fd14c83028d9d7" }
+  backend1: { digest: "sha256:790d2baaae40caa3e234df8451eec761a2400cb42c3f2d4fe58fb91fc049fb09" }
+  backend2: { digest: "sha256:3543ea5e6b6ddf7a56f716878784b7cd8874c60ea04ea773d2eff5baf4dc4117" }
+  backend3: { digest: "sha256:3022e3c3a3c78aac6659b85ae479b8f30296f75332f42ed12b24737802d9957e" }
+  backend4: { digest: "sha256:91c29f9d536bbedd584c6165668ea25a59b9db985ba3a0584b77daa79f9c5ab7" }
 
 frontend:
-  digest: "sha256:17b85b9a81913d28599efda14709bf3111344c56a27376bdfa34bbc79f206836"
+  digest: "sha256:31ca530e2c0fbb714666bd59b5c52821d766a620ec05987fd4d84f261326ff7e"
 
 database:
   host: app-prod-db.cjrdqwfftiij.us-east-1.rds.amazonaws.com
