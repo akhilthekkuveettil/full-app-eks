@@ -14,4 +14,4 @@ database:
 
 ingress:
   host: app.officialkart.in
-  certificateArn: "REPLACE_WITH_terraform_output_app_certificate_arn"
+  certificateArn: "arn:aws:acm:us-east-1:426737295553:certificate/b57b04b0-8e6c-4088-ba09-864ba25abb93"
