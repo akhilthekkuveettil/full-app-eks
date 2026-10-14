@@ -40,3 +40,43 @@ module "rds" {
   # only the cluster's nodes may reach Postgres
   allowed_security_group_ids = [module.eks.cluster_security_group_id]
 }
+
+# ---- IAM for cluster add-ons (installed later by Argo CD) --------------------
+
+module "irsa_lb_controller" {
+  source = "../modules/irsa-role"
+
+  name              = "${var.cluster_name}-aws-load-balancer-controller"
+  oidc_provider_arn = module.eks.oidc_provider_arn
+  oidc_provider_url = module.eks.oidc_provider_url
+  namespace         = "kube-system"
+  service_account   = "aws-load-balancer-controller"
+  policy_json       = file("${path.module}/policies/aws-load-balancer-controller.json")
+}
+
+data "aws_iam_policy_document" "external_secrets" {
+  statement {
+    actions   = ["secretsmanager:GetSecretValue", "secretsmanager:DescribeSecret"]
+    resources = [module.rds.master_user_secret_arn]
+  }
+}
+
+module "irsa_external_secrets" {
+  source = "../modules/irsa-role"
+
+  name              = "${var.cluster_name}-external-secrets"
+  oidc_provider_arn = module.eks.oidc_provider_arn
+  oidc_provider_url = module.eks.oidc_provider_url
+  namespace         = "external-secrets"
+  service_account   = "external-secrets"
+  policy_json       = data.aws_iam_policy_document.external_secrets.json
+}
+
+# ---- TLS certificate for the public hostname ---------------------------------
+
+module "app_cert" {
+  source = "../modules/acm-cert"
+
+  domain_name = var.app_hostname
+  zone_id     = var.hosted_zone_id
+}

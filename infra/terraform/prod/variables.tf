@@ -52,3 +52,14 @@ variable "admin_principal_arns" {
   type        = list(string)
   default     = []
 }
+
+variable "hosted_zone_id" {
+  description = "Route 53 public hosted zone for the app hostname."
+  type        = string
+  default     = "Z0603608CMVVXH716EK3"
+}
+
+variable "app_hostname" {
+  type    = string
+  default = "app.officialkart.in"
+}

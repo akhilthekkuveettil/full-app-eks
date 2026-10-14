@@ -1,0 +1,17 @@
+# Values for the app chart in production. CI updates the digests.
+backends:
+  backend1: { digest: "sha256:d824fb744b7522e95c8b64863debbab80e2fcbd6496dadeca8d3257f21870ca1" }
+  backend2: { digest: "sha256:8ee5105b0e566158b834d25dba7319d014285306fa0a8213f2984ee085a94254" }
+  backend3: { digest: "sha256:fd5a66021f7f0ca15b20ee71b8092cb9b635dd5d1907f44940bebe9b9e5d4eca" }
+  backend4: { digest: "sha256:00e1c166386ec2453a45b0316549b579e718c961e5eb6ebeea77fc0deda76468" }
+
+frontend:
+  digest: "sha256:567377da2e609a4e3bd01c98dee2b265efaca5495635d025f2679989238b2c8a"
+
+database:
+  host: app-prod-db.cjrdqwfftiij.us-east-1.rds.amazonaws.com
+  secretArn: "arn:aws:secretsmanager:us-east-1:426737295553:secret:rds!db-0eb55e47-8729-435b-9057-c53e6780a2ed-Dsa0sz"
+
+ingress:
+  host: app.officialkart.in
+  certificateArn: "REPLACE_WITH_terraform_output_app_certificate_arn"

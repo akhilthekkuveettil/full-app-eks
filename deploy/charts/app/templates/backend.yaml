@@ -1,0 +1,75 @@
+{{- range $name, $cfg := .Values.backends }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $name }}
+  labels: { app: {{ $name }}, tier: backend }
+  annotations:
+    # restart pods when the database secret changes (rotation)
+    reloader.stakater.com/auto: "true"
+spec:
+  replicas: {{ $.Values.replicas }}
+  selector:
+    matchLabels: { app: {{ $name }} }
+  template:
+    metadata:
+      labels: { app: {{ $name }}, tier: backend }
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        {{- include "app.podSecurityContext" $ | nindent 8 }}
+        runAsUser: 10001
+        runAsGroup: 10001
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels: { app: {{ $name }} }
+      containers:
+        - name: app
+          image: {{ $.Values.registry }}/{{ $name }}@{{ required (printf "backends.%s.digest is required" $name) $cfg.digest }}
+          ports:
+            - { name: http, containerPort: 8000 }
+          env:
+            - { name: SERVICE_NAME, value: {{ $name }} }
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef: { name: database, key: DATABASE_URL }
+          readinessProbe:
+            httpGet: { path: /health, port: http }
+            periodSeconds: 10
+          livenessProbe:
+            httpGet: { path: /health, port: http }
+            initialDelaySeconds: 20
+            periodSeconds: 20
+          resources:
+            requests: { cpu: 50m, memory: 96Mi }
+            limits: { memory: 256Mi }
+          securityContext:
+            {{- include "app.containerSecurityContext" $ | nindent 12 }}
+          volumeMounts:
+            - { name: tmp, mountPath: /tmp }
+      volumes:
+        - { name: tmp, emptyDir: { sizeLimit: 16Mi } }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $name }}
+  labels: { app: {{ $name }} }
+spec:
+  selector: { app: {{ $name }} }
+  ports:
+    - { name: http, port: 8000, targetPort: http }
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ $name }}
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels: { app: {{ $name }} }
+{{- end }}

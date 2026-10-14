@@ -1,0 +1,28 @@
+# Image digests are written into deploy/envs/prod.yaml.
+registry: 426737295553.dkr.ecr.us-east-1.amazonaws.com/app
+
+backends:
+  backend1: { digest: "" }
+  backend2: { digest: "" }
+  backend3: { digest: "" }
+  backend4: { digest: "" }
+
+frontend:
+  digest: ""
+
+replicas: 2
+
+database:
+  # RDS endpoint and the Secrets Manager secret (RDS-managed master credentials) it is read from
+  host: ""
+  port: 5432
+  name: appdb
+  secretArn: ""
+  region: us-east-1
+
+ingress:
+  host: ""
+  certificateArn: ""
+
+# VPC CIDR: the ALB (target-type ip) reaches pods from inside it, and RDS lives in it.
+vpcCidr: 10.0.0.0/16

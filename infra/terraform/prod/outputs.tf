@@ -41,3 +41,15 @@ output "oidc_provider_arn" {
 output "oidc_provider_url" {
   value = module.eks.oidc_provider_url
 }
+
+output "lb_controller_role_arn" {
+  value = module.irsa_lb_controller.role_arn
+}
+
+output "external_secrets_role_arn" {
+  value = module.irsa_external_secrets.role_arn
+}
+
+output "app_certificate_arn" {
+  value = module.app_cert.certificate_arn
+}
