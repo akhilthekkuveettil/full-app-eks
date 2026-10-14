@@ -26,3 +26,6 @@ ingress:
 
 # VPC CIDR: the ALB (target-type ip) reaches pods from inside it, and RDS lives in it.
 vpcCidr: 10.0.0.0/16
+
+# Kubernetes Service CIDR (EKS default for 10.x VPCs).
+serviceCidr: 172.20.0.0/16

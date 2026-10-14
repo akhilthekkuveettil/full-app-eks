@@ -41,6 +41,9 @@ spec:
     - to:
         - podSelector:
             matchLabels: { tier: backend }
+        # the VPC CNI policy agent sees the Service ClusterIP (before kube-proxy DNAT),
+        # so the Service CIDR must be allowed too, on the backend port only
+        - ipBlock: { cidr: {{ .Values.serviceCidr }} }
       ports:
         - { protocol: TCP, port: 8000 }
 ---
