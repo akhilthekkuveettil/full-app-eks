@@ -94,11 +94,50 @@ jobs:
           cache-from: type=gha,scope=frontend
           cache-to: type=gha,mode=max,scope=frontend
 
-  # Infrastructure runs before anything is deployed: plan on every PR and push (read-only role),
+  # Terraform only runs when something under infra/ changed in this push or pull request.
+  changes:
+    name: detect infra changes
+    runs-on: ubuntu-latest
+    outputs:
+      infra: ${{ steps.diff.outputs.infra }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - id: diff
+        env:
+          EVENT: ${{ github.event_name }}
+          PR_BASE: ${{ github.event.pull_request.base.sha }}
+          PR_HEAD: ${{ github.event.pull_request.head.sha }}
+          PUSH_BEFORE: ${{ github.event.before }}
+          PUSH_AFTER: ${{ github.sha }}
+        run: |
+          infra=false
+          case "$EVENT" in
+            pull_request) range="$PR_BASE...$PR_HEAD" ;;
+            push)
+              # a brand-new branch or a force-push has no usable "before": be safe and run
+              if [ "$PUSH_BEFORE" = "0000000000000000000000000000000000000000" ] || ! git cat-file -e "$PUSH_BEFORE^{commit}" 2>/dev/null; then
+                infra=true
+              else
+                range="$PUSH_BEFORE..$PUSH_AFTER"
+              fi ;;
+            *) range="" ;; # scheduled runs only re-test and re-scan the code
+          esac
+          if [ "$infra" = false ] && [ -n "${range:-}" ]; then
+            if git diff --name-only "$range" | grep -q '^infra/'; then infra=true; fi
+          fi
+          echo "infra=$infra" >> "$GITHUB_OUTPUT"
+          echo "Terraform will run: $infra"
+
+  # Infrastructure runs before anything is deployed, when infra/ changed: plan (read-only role),
   # apply only on main, only when the plan has changes, and only after approval on the
   # "production-infra" environment. The reviewed plan file is what gets applied.
   terraform-plan:
     name: terraform plan
+    needs: changes
+    if: needs.changes.outputs.infra == 'true'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -230,13 +269,14 @@ jobs:
   publish:
     name: publish ${{ matrix.service }}
     needs: [backend, frontend, terraform-plan, terraform-apply]
-    # terraform-apply is skipped when the plan has no changes; that still counts as ready
+    # both Terraform jobs are skipped when nothing under infra/ changed (or the plan is empty);
+    # a skipped job counts as ready, a failed one blocks the release
     if: >-
       ${{ !cancelled()
       && github.event_name == 'push' && github.ref == 'refs/heads/main'
       && needs.backend.result == 'success'
       && needs.frontend.result == 'success'
-      && needs.terraform-plan.result == 'success'
+      && (needs.terraform-plan.result == 'success' || needs.terraform-plan.result == 'skipped')
       && (needs.terraform-apply.result == 'success' || needs.terraform-apply.result == 'skipped') }}
     runs-on: ubuntu-latest
     permissions:

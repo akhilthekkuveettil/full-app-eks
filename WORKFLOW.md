@@ -8,15 +8,17 @@ For what the infrastructure is, see [INFRASTRUCTURE.md](INFRASTRUCTURE.md).
 ```
  feature branch / PR            main                                                 cluster
  -------------------            ----                                                 -------
- tests + dependency scan  --->  tests + scan + build  --->  terraform  --->  publish  --->  bump PR   merge   Argo CD
+ tests + dependency scan  --->  tests + scan + build  --->  terraform*  --->  publish  --->  bump PR   merge   Argo CD
  + image build (no push)        (same as PR)               plan/apply       push+sign       (digests) (deploy) syncs app
  + terraform plan (read-only)                              (gated)
+ (* only when infra/ changed)
 ```
 
-1. **Open a pull request.** CI runs tests, dependency scans, image builds and a read-only
-   `terraform plan`. Nothing is pushed or changed.
-2. **Merge to `main`.** CI runs again. If the Terraform plan has changes, a person approves the
-   apply first; then the `publish` job pushes signed images to ECR.
+1. **Open a pull request.** CI runs tests, dependency scans and image builds, plus a read-only
+   `terraform plan` when the PR touches `infra/`. Nothing is pushed or changed.
+2. **Merge to `main`.** CI runs again. If the push touched `infra/` and the Terraform plan has
+   changes, a person approves the apply first; otherwise Terraform is skipped. Then the `publish`
+   job pushes signed images to ECR.
 3. **A digest-bump pull request opens automatically** (`bump-digests` job). It points
    `deploy/envs/prod.yaml` at the images that were just published, after verifying their cosign
    signatures.
@@ -32,8 +34,9 @@ the older run.
 |---|---|---|
 | `backend` (matrix: backend1-4) | PR, main, schedule | Install pinned, hash-checked dependencies; `pytest`; `pip-audit` against `requirements.txt`; build the Docker image (no push) |
 | `frontend` | PR, main, schedule | `npm ci`; `ng test --no-watch` (Vitest); `npm audit --audit-level=high`; build the Docker image (no push) |
-| `terraform-plan` | PR, main, schedule | `terraform fmt -check`, `init`, `validate`, `plan` against production with the read-only role `app-github-terraform-plan`; the plan is written to the job summary. On `main`, a plan with changes is kept as an artifact for the apply job |
-| `terraform-apply` | pushes to `main` when the plan has changes | Runs in the `production-infra` environment (required reviewers), assumes `app-github-terraform-apply`, and applies exactly the saved plan. Skipped when there is nothing to change |
+| `changes` | PR, main, schedule | Looks at the files changed in the push or pull request and sets `infra=true` only if something under `infra/` changed (a new branch or force-push counts as changed; scheduled runs do not) |
+| `terraform-plan` | only when `infra/` changed | `terraform fmt -check`, `init`, `validate`, `plan` against production with the read-only role `app-github-terraform-plan`; the plan is written to the job summary. On `main`, a plan with changes is kept as an artifact for the apply job |
+| `terraform-apply` | pushes to `main` when `infra/` changed and the plan has changes | Runs in the `production-infra` environment (required reviewers), assumes `app-github-terraform-apply`, and applies exactly the saved plan. Skipped when there is nothing to change |
 | `publish` (matrix: 4 backends + frontend) | pushes to `main` only, after tests, scans and the Terraform step succeed (an apply that was skipped for "no changes" counts as success) | Assume the AWS role through OIDC; build; Trivy scan (fails on fixable HIGH/CRITICAL); push `app/<service>:<git sha>`; sign the image digest with cosign (keyless); write the digest to the job summary |
 | `bump-digests` | after `publish` succeeds | Look up the digest of each image tagged with the commit SHA; `cosign verify` that this workflow signed it; rewrite the digests in `deploy/envs/prod.yaml` (`.github/scripts/bump_digests.py`); push branch `automation/bump-digests` and open or update a single pull request |
 
