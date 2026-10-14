@@ -1,18 +1,26 @@
-<div class="backdrop" aria-hidden="true">
-  <span class="orb orb-a"></span>
-  <span class="orb orb-b"></span>
-  <span class="orb orb-c"></span>
-  <span class="grid-floor"></span>
+<div class="rain" aria-hidden="true">
+  @for (c of rain; track $index) {
+    <span
+      class="col"
+      [style.left.%]="c.x"
+      [style.font-size.px]="c.size"
+      [style.animation-duration.s]="c.duration"
+      [style.animation-delay.s]="c.delay"
+      [style.opacity]="c.opacity"
+      >{{ c.text }}</span
+    >
+  }
 </div>
+<div class="scanlines" aria-hidden="true"></div>
 
 <main>
   <header class="hero">
     <div class="hero-text">
-      <p class="eyebrow">Service health</p>
-      <h1>Backend status</h1>
+      <p class="eyebrow">&gt; system.health --watch</p>
+      <h1 data-text="Backend status">Backend status</h1>
       <p class="summary" [class.degraded]="liveCount() < backends().length">
         <span class="pulse"></span>
-        {{ liveCount() }} of {{ backends().length }} services live
+        {{ liveCount() }} of {{ backends().length }} services live<span class="cursor">_</span>
       </p>
     </div>
 
@@ -44,7 +52,7 @@
   </section>
 
   <section class="panel">
-    <h2>History</h2>
+    <h2>&gt; history.log</h2>
     @if (history().length === 0) {
       <p class="hint">No history yet.</p>
     } @else {

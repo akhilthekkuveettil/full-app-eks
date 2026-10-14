@@ -19,6 +19,34 @@ const BACKENDS = ['backend1', 'backend2', 'backend3', 'backend4'];
 const POLL_MS = 5000;
 const MAX_TILT = 9;
 
+// Digital-rain columns. Generated once from a fixed seed so every render is identical.
+const GLYPHS = 'ｱｲｳｴｵｶｷｸｹｺｻｼｽｾｿﾀﾁﾂﾃﾄﾅﾆﾇﾈﾉﾊﾋﾌﾍﾎﾏﾐﾑﾒﾓﾔﾕﾖﾗﾘﾙﾚﾛﾜﾝ0123456789:.=*+-<>|';
+
+interface RainColumn {
+  x: number;
+  size: number;
+  duration: number;
+  delay: number;
+  opacity: number;
+  text: string;
+}
+
+function buildRain(columns: number, length: number): RainColumn[] {
+  let seed = 20260514;
+  const next = () => {
+    seed = (seed * 1664525 + 1013904223) % 4294967296;
+    return seed / 4294967296;
+  };
+  return Array.from({ length: columns }, (_, i) => ({
+    x: (i / columns) * 100 + next() * (100 / columns) * 0.6,
+    size: 12 + Math.floor(next() * 8),
+    duration: 7 + next() * 11,
+    delay: -next() * 18,
+    opacity: 0.35 + next() * 0.65,
+    text: Array.from({ length }, () => GLYPHS[Math.floor(next() * GLYPHS.length)]).join('\n'),
+  }));
+}
+
 @Component({
   selector: 'app-root',
   imports: [DatePipe],
@@ -34,6 +62,8 @@ export class App implements OnInit, OnDestroy {
   );
 
   protected readonly history = signal<HistoryRow[]>([]);
+
+  protected readonly rain = buildRain(44, 26);
 
   protected readonly liveCount = computed(() => this.backends().filter((b) => b.live).length);
 
