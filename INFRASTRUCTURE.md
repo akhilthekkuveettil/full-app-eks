@@ -99,7 +99,7 @@ disruptive. The Kubernetes API CIDRs reach CI through the `TF_API_ALLOWED_CIDRS`
 | Add-ons | `vpc-cni` with NetworkPolicy enforcement enabled, `kube-proxy`, `coredns` |
 | IRSA | OIDC provider for the cluster; roles for the AWS Load Balancer Controller and External Secrets |
 | RDS | Encrypted, not publicly accessible, TLS enforced (`rds.force_ssl=1`), 7-day backups, deletion protection, master password managed by RDS in Secrets Manager (rotation interval pushed to 1000 days for now, see below). Security group allows 5432 only from the EKS cluster security group |
-| ECR | Immutable tags, scan on push, AES256, keep the 10 most recent images per repository |
+| ECR | Immutable tags, scan on push, AES256, keep the 20 most recent images per repository |
 | CI access | GitHub OIDC provider and three roles, all pinned to this repository by GitHub's immutable owner/repo IDs: `app-github-ecr-push` (ECR push to `app/*`, only from `main`), `app-github-terraform-plan` (ReadOnlyAccess plus the state lock file; pull requests and `main`) and `app-github-terraform-apply` (AdministratorAccess; only jobs using the `production-infra` environment) |
 | TLS / DNS | ACM certificates for `app.officialkart.in` and `argocd.officialkart.in` (DNS-validated in Route 53) and alias records to the ALBs the Ingresses create |
 | Argo CD access | Own ALB whose security group (`alb-security-group` module) allows 80/443 from `argocd_allowed_cidrs`, currently `0.0.0.0/0` (open by decision; set it to specific CIDRs in `terraform.tfvars` to restrict) |
@@ -195,7 +195,7 @@ Scaling nodes: change `node_*_size` in the `eks` module call and apply.
   (`repo:<owner>@<owner_id>/<repo>@<repo_id>:ref:...`), and the role trusts that exact form. If the
   repository is deleted and recreated, update `github_repo_id`.
 * **ECR keeps 10 images per repository.** Each build produces an image plus a cosign signature
-  artifact, so ten images is roughly five builds. Raise `keep_images` if you need a longer
+  artifact, so twenty images is roughly ten builds. Raise `keep_images` if you need a longer
   rollback window.
 * **Secret rotation.** RDS rotates its managed secret every 7 days by default. The rotation
   interval is pushed to the 1000-day maximum for now; AWS documents the schedule as changeable

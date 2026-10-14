@@ -9,6 +9,9 @@ module "ecr" {
   source = "../modules/ecr"
 
   repositories = [for s in var.services : "app/${s}"]
+
+  # each build adds an image plus its cosign signature artifact, so 20 is roughly 10 builds
+  keep_images = 20
 }
 
 module "github_oidc" {
