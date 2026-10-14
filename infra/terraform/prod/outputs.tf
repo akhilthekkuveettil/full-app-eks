@@ -53,3 +53,11 @@ output "external_secrets_role_arn" {
 output "app_certificate_arn" {
   value = module.app_cert.certificate_arn
 }
+
+output "argocd_certificate_arn" {
+  value = module.argocd_cert.certificate_arn
+}
+
+output "argocd_alb_security_group_id" {
+  value = module.argocd_alb_sg.security_group_id
+}

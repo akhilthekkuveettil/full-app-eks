@@ -100,7 +100,8 @@ replace is still disruptive.
 | RDS | Encrypted, not publicly accessible, TLS enforced (`rds.force_ssl=1`), 7-day backups, deletion protection, master password managed by RDS in Secrets Manager (rotation interval pushed to 1000 days for now, see below). Security group allows 5432 only from the EKS cluster security group |
 | ECR | Immutable tags, scan on push, AES256, keep the 10 most recent images per repository |
 | CI access | GitHub OIDC provider and role `app-github-ecr-push`. Trust is pinned to this repository's `main` branch using GitHub's immutable owner/repo IDs; permissions are ECR push to the five `app/*` repositories only |
-| TLS / DNS | ACM certificate for `app.officialkart.in` (DNS-validated in Route 53) and an alias record to the ALB the Ingress creates |
+| TLS / DNS | ACM certificates for `app.officialkart.in` and `argocd.officialkart.in` (DNS-validated in Route 53) and alias records to the ALBs the Ingresses create |
+| Argo CD access | Own ALB whose security group (`alb-security-group` module) allows 80/443 only from `argocd_allowed_cidrs` (defaults to `api_allowed_cidrs`); the CIDRs live in the git-ignored `terraform.tfvars`, never in git |
 
 ## Kubernetes layer (`deploy/`)
 
@@ -162,7 +163,7 @@ These are estimates; check the AWS pricing calculator and set a budget alert.
 # kubectl access (your IP must be in api_allowed_cidrs)
 aws eks update-kubeconfig --region us-east-1 --name app-prod
 
-# Argo CD UI
+# Argo CD UI: https://argocd.officialkart.in (only from the allowed CIDRs), or locally:
 kubectl -n argocd port-forward svc/argocd-server 8443:443        # https://localhost:8443
 kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath='{.data.password}' | base64 -d; echo
 

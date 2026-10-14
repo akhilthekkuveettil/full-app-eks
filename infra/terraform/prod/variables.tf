@@ -69,3 +69,20 @@ variable "create_app_dns_record" {
   type        = bool
   default     = true
 }
+
+variable "argocd_hostname" {
+  type    = string
+  default = "argocd.officialkart.in"
+}
+
+variable "argocd_allowed_cidrs" {
+  description = "CIDRs allowed to open the Argo CD UI. Defaults to api_allowed_cidrs."
+  type        = list(string)
+  default     = null
+}
+
+variable "create_argocd_dns_record" {
+  description = "Create the Route 53 alias record. Enable once the Argo CD Ingress has created its ALB."
+  type        = bool
+  default     = false
+}

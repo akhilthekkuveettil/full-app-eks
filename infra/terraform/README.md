@@ -9,6 +9,7 @@ modules/
   ecr/            ECR repositories (immutable tags, scan on push, lifecycle)
   eks/            EKS cluster, managed node group, IRSA OIDC provider, core add-ons
   irsa-role/      IAM role assumable by one Kubernetes service account
+  alb-security-group/  SG limiting who can reach an ALB
   acm-cert/       ACM certificate validated through Route 53
   dns-alias/      Route 53 alias record to a load balancer
   rds/            Postgres on RDS (private, encrypted, TLS-only, RDS-managed password in Secrets Manager)

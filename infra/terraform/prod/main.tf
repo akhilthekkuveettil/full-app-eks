@@ -102,3 +102,38 @@ module "app_dns" {
   target_dns_name = data.aws_lb.app[0].dns_name
   target_zone_id  = data.aws_lb.app[0].zone_id
 }
+
+# ---- Argo CD UI at its own hostname, reachable only from allowed CIDRs -------------
+
+module "argocd_cert" {
+  source = "../modules/acm-cert"
+
+  domain_name = var.argocd_hostname
+  zone_id     = var.hosted_zone_id
+}
+
+module "argocd_alb_sg" {
+  source = "../modules/alb-security-group"
+
+  name          = "${var.cluster_name}-argocd-alb"
+  vpc_id        = module.vpc.vpc_id
+  allowed_cidrs = coalesce(var.argocd_allowed_cidrs, var.api_allowed_cidrs)
+}
+
+data "aws_lb" "argocd" {
+  count = var.create_argocd_dns_record ? 1 : 0
+
+  tags = {
+    "ingress.k8s.aws/stack" = "argocd/argocd"
+  }
+}
+
+module "argocd_dns" {
+  count  = var.create_argocd_dns_record ? 1 : 0
+  source = "../modules/dns-alias"
+
+  zone_id         = var.hosted_zone_id
+  name            = var.argocd_hostname
+  target_dns_name = data.aws_lb.argocd[0].dns_name
+  target_zone_id  = data.aws_lb.argocd[0].zone_id
+}
