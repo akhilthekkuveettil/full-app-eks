@@ -1,4 +1,4 @@
-import { Component, OnDestroy, OnInit, inject, signal } from '@angular/core';
+import { Component, OnDestroy, OnInit, computed, inject, signal } from '@angular/core';
 import { DatePipe } from '@angular/common';
 import { HttpClient } from '@angular/common/http';
 import { firstValueFrom, timeout } from 'rxjs';
@@ -17,6 +17,7 @@ interface HistoryRow {
 
 const BACKENDS = ['backend1', 'backend2', 'backend3', 'backend4'];
 const POLL_MS = 5000;
+const MAX_TILT = 9;
 
 @Component({
   selector: 'app-root',
@@ -33,6 +34,26 @@ export class App implements OnInit, OnDestroy {
   );
 
   protected readonly history = signal<HistoryRow[]>([]);
+
+  protected readonly liveCount = computed(() => this.backends().filter((b) => b.live).length);
+
+  // 3D tilt: rotate the card towards the pointer, up to MAX_TILT degrees
+  protected tilt(event: PointerEvent) {
+    const wrapper = event.currentTarget as HTMLElement;
+    const card = wrapper.firstElementChild as HTMLElement | null;
+    if (!card) return;
+    const box = wrapper.getBoundingClientRect();
+    const x = (event.clientX - box.left) / box.width - 0.5;
+    const y = (event.clientY - box.top) / box.height - 0.5;
+    card.style.setProperty('--ry', `${(x * MAX_TILT * 2).toFixed(1)}deg`);
+    card.style.setProperty('--rx', `${(-y * MAX_TILT * 2).toFixed(1)}deg`);
+  }
+
+  protected resetTilt(event: PointerEvent) {
+    const card = (event.currentTarget as HTMLElement).firstElementChild as HTMLElement | null;
+    card?.style.setProperty('--rx', '0deg');
+    card?.style.setProperty('--ry', '0deg');
+  }
 
   ngOnInit() {
     this.refresh();

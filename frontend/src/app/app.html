@@ -1,31 +1,71 @@
+<div class="backdrop" aria-hidden="true">
+  <span class="orb orb-a"></span>
+  <span class="orb orb-b"></span>
+  <span class="orb orb-c"></span>
+  <span class="grid-floor"></span>
+</div>
+
 <main>
-  <h1>Backend status</h1>
-  <div class="grid">
+  <header class="hero">
+    <div class="hero-text">
+      <p class="eyebrow">Service health</p>
+      <h1>Backend status</h1>
+      <p class="summary" [class.degraded]="liveCount() < backends().length">
+        <span class="pulse"></span>
+        {{ liveCount() }} of {{ backends().length }} services live
+      </p>
+    </div>
+
+    <div class="scene" aria-hidden="true">
+      <div class="cube">
+        <span class="face front"></span>
+        <span class="face back"></span>
+        <span class="face right"></span>
+        <span class="face left"></span>
+        <span class="face top"></span>
+        <span class="face bottom"></span>
+      </div>
+    </div>
+  </header>
+
+  <section class="grid" aria-label="Backend services">
     @for (b of backends(); track b.name) {
-      <section class="card" [class.live]="b.live === true" [class.off]="b.live === false">
-        <span class="dot"></span>
-        <span class="msg">{{ b.message }}</span>
-      </section>
+      <div
+        class="tilt"
+        (pointermove)="tilt($event)"
+        (pointerleave)="resetTilt($event)"
+      >
+        <section class="card" [class.live]="b.live === true" [class.off]="b.live === false">
+          <span class="dot"></span>
+          <span class="msg">{{ b.message }}</span>
+        </section>
+      </div>
     }
-  </div>
-  <h2>History</h2>
-  @if (history().length === 0) {
-    <p class="hint">No history yet.</p>
-  } @else {
-    <table>
-      <thead>
-        <tr><th>Time</th><th>Service</th><th>Status</th></tr>
-      </thead>
-      <tbody>
-        @for (row of history(); track $index) {
-          <tr>
-            <td>{{ row.created_at | date: 'medium' }}</td>
-            <td>{{ row.service }}</td>
-            <td [class]="row.status === 'live' ? 'ok' : 'bad'">{{ row.status }}</td>
-          </tr>
-        }
-      </tbody>
-    </table>
-  }
-  <p class="hint">Refreshes every 5 seconds.</p>
+  </section>
+
+  <section class="panel">
+    <h2>History</h2>
+    @if (history().length === 0) {
+      <p class="hint">No history yet.</p>
+    } @else {
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr><th>Time</th><th>Service</th><th>Status</th></tr>
+          </thead>
+          <tbody>
+            @for (row of history(); track $index) {
+              <tr>
+                <td>{{ row.created_at | date: 'medium' }}</td>
+                <td>{{ row.service }}</td>
+                <td [class]="row.status === 'live' ? 'ok' : 'bad'">{{ row.status }}</td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      </div>
+    }
+  </section>
+
+  <p class="hint footer">Refreshes every 5 seconds.</p>
 </main>
