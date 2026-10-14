@@ -20,11 +20,23 @@ module "github_oidc" {
   ecr_repository_arns = module.ecr.repository_arns
 }
 
+module "eks" {
+  source = "../modules/eks"
+
+  name                 = var.cluster_name
+  kubernetes_version   = var.kubernetes_version
+  subnet_ids           = module.vpc.private_subnet_ids
+  public_access_cidrs  = var.api_allowed_cidrs
+  admin_principal_arns = var.admin_principal_arns
+}
+
 module "rds" {
   source = "../modules/rds"
 
-  name          = "${var.cluster_name}-db"
-  vpc_id        = module.vpc.vpc_id
-  subnet_ids    = module.vpc.private_subnet_ids
-  allowed_cidrs = module.vpc.private_subnet_cidrs
+  name       = "${var.cluster_name}-db"
+  vpc_id     = module.vpc.vpc_id
+  subnet_ids = module.vpc.private_subnet_ids
+
+  # only the cluster's nodes may reach Postgres
+  allowed_security_group_ids = [module.eks.cluster_security_group_id]
 }

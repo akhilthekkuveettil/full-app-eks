@@ -9,21 +9,23 @@ resource "aws_security_group" "this" {
   vpc_id      = var.vpc_id
 }
 
+# count, not for_each: the values can be unknown until apply (e.g. a security group created
+# in the same run), but the list length is always known.
 resource "aws_vpc_security_group_ingress_rule" "cidr" {
-  for_each = toset(var.allowed_cidrs)
+  count = length(var.allowed_cidrs)
 
   security_group_id = aws_security_group.this.id
-  cidr_ipv4         = each.value
+  cidr_ipv4         = var.allowed_cidrs[count.index]
   from_port         = 5432
   to_port           = 5432
   ip_protocol       = "tcp"
 }
 
 resource "aws_vpc_security_group_ingress_rule" "sg" {
-  for_each = toset(var.allowed_security_group_ids)
+  count = length(var.allowed_security_group_ids)
 
   security_group_id            = aws_security_group.this.id
-  referenced_security_group_id = each.value
+  referenced_security_group_id = var.allowed_security_group_ids[count.index]
   from_port                    = 5432
   to_port                      = 5432
   ip_protocol                  = "tcp"

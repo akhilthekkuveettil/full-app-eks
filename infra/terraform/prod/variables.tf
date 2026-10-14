@@ -36,3 +36,19 @@ variable "github_repo_id" {
   type        = number
   default     = 1418427233
 }
+
+variable "kubernetes_version" {
+  type    = string
+  default = "1.36"
+}
+
+variable "api_allowed_cidrs" {
+  description = "CIDRs allowed to reach the public Kubernetes API (set in terraform.tfvars, e.g. [\"1.2.3.4/32\"])."
+  type        = list(string)
+}
+
+variable "admin_principal_arns" {
+  description = "Extra IAM principals with cluster-admin (the identity running Terraform already is)."
+  type        = list(string)
+  default     = []
+}
