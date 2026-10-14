@@ -1,10 +1,20 @@
+# CI/CD pipeline. Stages, in order:
+#
+#   Detect  ->  Test (backends + frontend)  ->  Infra (terraform plan / apply)
+#           ->  Release (scan, push, sign images)  ->  Deploy (open the digest-bump PR)
+#
+# * Pull requests run Detect, Test and (when infra/ changed) the read-only Terraform plan.
+# * Pushes to main continue through Release and Deploy.
+# * Merging the digest-bump PR is the production deploy; Argo CD syncs deploy/ from main.
+#
+# Keep this file named ci.yml: image signatures are verified against this workflow's identity.
 name: CI
 
 on:
   push:
     branches: [main]
-    # A digest-bump PR only edits deploy/; running CI for it would publish a new image,
-    # open another bump PR, and loop forever.
+    # The digest-bump PR only edits deploy/. Running CI for it would publish new images and
+    # open another bump PR, forever.
     paths-ignore:
       - "deploy/**"
       - "**.md"
@@ -19,93 +29,24 @@ concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
 
+env:
+  AWS_REGION: us-east-1
+
 jobs:
-  backend:
-    name: ${{ matrix.service }}
-    runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        service: [backend1, backend2, backend3, backend4]
-    defaults:
-      run:
-        working-directory: ${{ matrix.service }}
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-          cache: pip
-          cache-dependency-path: ${{ matrix.service }}/requirements*.txt
-
-      - name: Install dependencies
-        run: |
-          pip install --require-hashes -r requirements.txt
-          pip install -r requirements-dev.txt
-
-      - name: Unit tests
-        run: python -m pytest -q
-
-      - name: Dependency scan (pip-audit)
-        run: |
-          pip install pip-audit
-          pip-audit -r requirements.txt --require-hashes --disable-pip
-
-      - uses: docker/setup-buildx-action@v3
-
-      - name: Build image
-        uses: docker/build-push-action@v6
-        with:
-          context: ${{ matrix.service }}
-          push: false
-          cache-from: type=gha,scope=${{ matrix.service }}
-          cache-to: type=gha,mode=max,scope=${{ matrix.service }}
-
-  frontend:
-    runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: frontend
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 24
-          cache: npm
-          cache-dependency-path: frontend/package-lock.json
-
-      - run: npm ci
-
-      - name: Unit tests
-        run: npx ng test --no-watch
-
-      - name: Dependency scan (npm audit)
-        run: npm audit --audit-level=high
-
-      - uses: docker/setup-buildx-action@v3
-
-      - name: Build image
-        uses: docker/build-push-action@v6
-        with:
-          context: frontend
-          push: false
-          cache-from: type=gha,scope=frontend
-          cache-to: type=gha,mode=max,scope=frontend
-
-  # Terraform only runs when something under infra/ changed in this push or pull request.
-  changes:
-    name: detect infra changes
+  # ─────────────────────────────── 1. Detect ───────────────────────────────
+  detect-changes:
+    name: "Detect · infra changes"
     runs-on: ubuntu-latest
     outputs:
       infra: ${{ steps.diff.outputs.infra }}
     steps:
-      - uses: actions/checkout@v4
+      - name: Check out code (full history)
+        uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      - id: diff
+      - name: Did anything under infra/ change?
+        id: diff
         env:
           EVENT: ${{ github.event_name }}
           PR_BASE: ${{ github.event.pull_request.base.sha }}
@@ -131,17 +72,101 @@ jobs:
           echo "infra=$infra" >> "$GITHUB_OUTPUT"
           echo "Terraform will run: $infra"
 
-  # Infrastructure runs before anything is deployed, when infra/ changed: plan (read-only role),
-  # apply only on main, only when the plan has changes, and only after approval on the
-  # "production-infra" environment. The reviewed plan file is what gets applied.
+  # ──────────────────────────────── 2. Test ────────────────────────────────
+  test-backend:
+    name: "Test · ${{ matrix.service }}"
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        service: [backend1, backend2, backend3, backend4]
+    defaults:
+      run:
+        working-directory: ${{ matrix.service }}
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: ${{ matrix.service }}/requirements*.txt
+
+      - name: Install dependencies
+        run: |
+          pip install --require-hashes -r requirements.txt
+          pip install -r requirements-dev.txt
+
+      - name: Unit tests (pytest)
+        run: python -m pytest -q
+
+      - name: Dependency scan (pip-audit)
+        run: |
+          pip install pip-audit
+          pip-audit -r requirements.txt --require-hashes --disable-pip
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build image (no push)
+        uses: docker/build-push-action@v6
+        with:
+          context: ${{ matrix.service }}
+          push: false
+          cache-from: type=gha,scope=${{ matrix.service }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.service }}
+
+  test-frontend:
+    name: "Test · frontend"
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Unit tests (Vitest)
+        run: npx ng test --no-watch
+
+      - name: Dependency scan (npm audit)
+        run: npm audit --audit-level=high
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build image (no push)
+        uses: docker/build-push-action@v6
+        with:
+          context: frontend
+          push: false
+          cache-from: type=gha,scope=frontend
+          cache-to: type=gha,mode=max,scope=frontend
+
+  # ──────────────────────────────── 3. Infra ───────────────────────────────
+  # Only when infra/ changed. Plan runs with a read-only role on PRs and pushes. Apply runs on
+  # main only, only when the plan has changes, and only after approval on the
+  # "production-infra" environment; it applies exactly the plan that was reviewed.
   terraform-plan:
-    name: terraform plan
-    needs: changes
-    if: needs.changes.outputs.infra == 'true'
+    name: "Infra · terraform plan"
+    needs: detect-changes
+    if: needs.detect-changes.outputs.infra == 'true'
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      id-token: write
+      id-token: write # OIDC to AWS
     outputs:
       changes: ${{ steps.plan.outputs.changes }}
     env:
@@ -150,40 +175,28 @@ jobs:
       run:
         working-directory: infra/terraform/prod
     steps:
-      - uses: actions/checkout@v4
+      - name: Check out code
+        uses: actions/checkout@v4
 
-      - uses: hashicorp/setup-terraform@v3
+      - name: Set up Terraform
+        uses: ./.github/actions/setup-terraform
         with:
-          terraform_version: 1.16.5
-          terraform_wrapper: false
-
-      - name: Kubernetes API CIDRs from the secret
-        env:
-          CIDRS: ${{ secrets.TF_API_ALLOWED_CIDRS }}
-        run: |
-          v="$(echo "$CIDRS" | tr -d ' \n')"
-          if [ -z "$v" ]; then
-            echo "::error::Repository secret TF_API_ALLOWED_CIDRS is empty or missing"
-            exit 1
-          fi
-          # accept a JSON list (["1.2.3.4/32"]) or a plain comma-separated list (1.2.3.4/32,5.6.7.8/32)
-          case "$v" in
-            \[*) ;;
-            *) v="[\"${v//,/\",\"}\"]" ;;
-          esac
-          echo "TF_VAR_api_allowed_cidrs=$v" >> "$GITHUB_ENV"
+          api-allowed-cidrs: ${{ secrets.TF_API_ALLOWED_CIDRS }}
 
       - name: Format check
         run: terraform fmt -check -recursive -diff ..
 
-      - uses: aws-actions/configure-aws-credentials@v4
+      - name: Configure AWS credentials (plan role, read-only)
+        uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: arn:aws:iam::426737295553:role/app-github-terraform-plan
-          aws-region: us-east-1
+          aws-region: ${{ env.AWS_REGION }}
 
-      - run: terraform init -input=false
+      - name: Init
+        run: terraform init -input=false
 
-      - run: terraform validate
+      - name: Validate
+        run: terraform validate
 
       - name: Plan
         id: plan
@@ -211,71 +224,58 @@ jobs:
           retention-days: 1
 
   terraform-apply:
-    name: terraform apply
+    name: "Infra · terraform apply (needs approval)"
     needs: terraform-plan
     if: github.event_name == 'push' && github.ref == 'refs/heads/main' && needs.terraform-plan.outputs.changes == 'true'
     runs-on: ubuntu-latest
     environment: production-infra
     permissions:
       contents: read
-      id-token: write
+      id-token: write # OIDC to AWS
     env:
       TF_IN_AUTOMATION: "1"
     defaults:
       run:
         working-directory: infra/terraform/prod
     steps:
-      - uses: actions/checkout@v4
+      - name: Check out code
+        uses: actions/checkout@v4
 
-      - uses: hashicorp/setup-terraform@v3
+      - name: Set up Terraform
+        uses: ./.github/actions/setup-terraform
         with:
-          terraform_version: 1.16.5
-          terraform_wrapper: false
+          api-allowed-cidrs: ${{ secrets.TF_API_ALLOWED_CIDRS }}
 
-      - name: Kubernetes API CIDRs from the secret
-        env:
-          CIDRS: ${{ secrets.TF_API_ALLOWED_CIDRS }}
-        run: |
-          v="$(echo "$CIDRS" | tr -d ' \n')"
-          if [ -z "$v" ]; then
-            echo "::error::Repository secret TF_API_ALLOWED_CIDRS is empty or missing"
-            exit 1
-          fi
-          # accept a JSON list (["1.2.3.4/32"]) or a plain comma-separated list (1.2.3.4/32,5.6.7.8/32)
-          case "$v" in
-            \[*) ;;
-            *) v="[\"${v//,/\",\"}\"]" ;;
-          esac
-          echo "TF_VAR_api_allowed_cidrs=$v" >> "$GITHUB_ENV"
-
-      - uses: aws-actions/configure-aws-credentials@v4
+      - name: Configure AWS credentials (apply role)
+        uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: arn:aws:iam::426737295553:role/app-github-terraform-apply
-          aws-region: us-east-1
+          aws-region: ${{ env.AWS_REGION }}
 
-      - uses: actions/download-artifact@v4
+      - name: Download the reviewed plan
+        uses: actions/download-artifact@v4
         with:
           name: tfplan
           path: infra/terraform/prod
 
-      - run: terraform init -input=false
+      - name: Init
+        run: terraform init -input=false
 
-      # a plan applies only if state has not changed since it was made, otherwise Terraform refuses
+      # a saved plan applies only if state has not changed since it was made
       - name: Apply the reviewed plan
         run: terraform apply -input=false -lock-timeout=120s tfplan
 
-  # Only on pushes to main, after tests, dependency scans and the infrastructure step pass.
-  # Auth is GitHub OIDC -> IAM role limited to this repo's main branch and ECR push.
-  publish:
-    name: publish ${{ matrix.service }}
-    needs: [backend, frontend, terraform-plan, terraform-apply]
-    # both Terraform jobs are skipped when nothing under infra/ changed (or the plan is empty);
-    # a skipped job counts as ready, a failed one blocks the release
+  # ─────────────────────────────── 4. Release ──────────────────────────────
+  # Pushes to main only, after tests, dependency scans and the Infra stage. A skipped Terraform
+  # job (nothing changed) counts as ready; a failed one blocks the release.
+  publish-image:
+    name: "Release · publish ${{ matrix.service }}"
+    needs: [test-backend, test-frontend, terraform-plan, terraform-apply]
     if: >-
       ${{ !cancelled()
       && github.event_name == 'push' && github.ref == 'refs/heads/main'
-      && needs.backend.result == 'success'
-      && needs.frontend.result == 'success'
+      && needs.test-backend.result == 'success'
+      && needs.test-frontend.result == 'success'
       && (needs.terraform-plan.result == 'success' || needs.terraform-plan.result == 'skipped')
       && (needs.terraform-apply.result == 'success' || needs.terraform-apply.result == 'skipped') }}
     runs-on: ubuntu-latest
@@ -286,20 +286,22 @@ jobs:
       fail-fast: false
       matrix:
         service: [backend1, backend2, backend3, backend4, frontend]
-    env:
-      AWS_REGION: us-east-1
     steps:
-      - uses: actions/checkout@v4
+      - name: Check out code
+        uses: actions/checkout@v4
 
-      - uses: aws-actions/configure-aws-credentials@v4
+      - name: Configure AWS credentials (ECR push role)
+        uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: arn:aws:iam::426737295553:role/app-github-ecr-push
           aws-region: ${{ env.AWS_REGION }}
 
-      - id: ecr
+      - name: Log in to ECR
+        id: ecr
         uses: aws-actions/amazon-ecr-login@v2
 
-      - uses: docker/setup-buildx-action@v3
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
 
       - name: Build image (local, for scanning)
         uses: docker/build-push-action@v6
@@ -327,7 +329,8 @@ jobs:
           cache-from: type=gha,scope=${{ matrix.service }}
           provenance: false
 
-      - uses: sigstore/cosign-installer@v3.7.0
+      - name: Install cosign
+        uses: sigstore/cosign-installer@v3.7.0
 
       - name: Sign image (keyless)
         run: |
@@ -343,15 +346,16 @@ jobs:
             cosign sign --yes "$image"
           fi
 
-      - name: Summary
+      - name: Write image digest to the job summary
         run: |
           echo "${{ matrix.service }}: ${{ steps.ecr.outputs.registry }}/app/${{ matrix.service }}@${{ steps.push.outputs.digest }}" >> "$GITHUB_STEP_SUMMARY"
 
+  # ──────────────────────────────── 5. Deploy ──────────────────────────────
   # Opens (or updates) one pull request that points deploy/envs/prod.yaml at the images that
-  # were just published. Merging it is the production deploy: Argo CD syncs from main.
-  bump-digests:
-    name: open digest bump PR
-    needs: publish
+  # were just published. Merging it is the production deploy.
+  open-deploy-pr:
+    name: "Deploy · open digest-bump PR"
+    needs: publish-image
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     permissions:
@@ -359,23 +363,26 @@ jobs:
       pull-requests: write # open / update the PR
       id-token: write # OIDC to AWS (read digests) and cosign verification
     env:
-      AWS_REGION: us-east-1
       BRANCH: automation/bump-digests
       GH_TOKEN: ${{ github.token }}
     steps:
-      - uses: actions/checkout@v4
+      - name: Check out code
+        uses: actions/checkout@v4
 
-      - uses: aws-actions/configure-aws-credentials@v4
+      - name: Configure AWS credentials (ECR push role)
+        uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: arn:aws:iam::426737295553:role/app-github-ecr-push
           aws-region: ${{ env.AWS_REGION }}
 
-      - id: ecr
+      - name: Log in to ECR
+        id: ecr
         uses: aws-actions/amazon-ecr-login@v2
 
-      - uses: sigstore/cosign-installer@v3.7.0
+      - name: Install cosign
+        uses: sigstore/cosign-installer@v3.7.0
 
-      - name: Resolve and verify digests for this commit
+      - name: Resolve image digests and verify signatures
         id: digests
         run: |
           pairs=""

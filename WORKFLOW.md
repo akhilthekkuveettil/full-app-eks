@@ -17,9 +17,9 @@ For what the infrastructure is, see [INFRASTRUCTURE.md](INFRASTRUCTURE.md).
 1. **Open a pull request.** CI runs tests, dependency scans and image builds, plus a read-only
    `terraform plan` when the PR touches `infra/`. Nothing is pushed or changed.
 2. **Merge to `main`.** CI runs again. If the push touched `infra/` and the Terraform plan has
-   changes, a person approves the apply first; otherwise Terraform is skipped. Then the `publish`
-   job pushes signed images to ECR.
-3. **A digest-bump pull request opens automatically** (`bump-digests` job). It points
+   changes, a person approves the apply first; otherwise Terraform is skipped. Then the Release stage
+   (`publish-image`) pushes signed images to ECR.
+3. **A digest-bump pull request opens automatically** (`open-deploy-pr` job). It points
    `deploy/envs/prod.yaml` at the images that were just published, after verifying their cosign
    signatures.
 4. **Merge that pull request to deploy.** Argo CD syncs `deploy/` from `main` to the cluster.
@@ -30,25 +30,29 @@ Triggers: pull requests, pushes to `main`, and a weekly schedule (Mondays 06:00 
 published vulnerabilities are caught even without a push. A new push to the same ref cancels
 the older run.
 
-| Job | Runs for | What it does |
-|---|---|---|
-| `backend` (matrix: backend1-4) | PR, main, schedule | Install pinned, hash-checked dependencies; `pytest`; `pip-audit` against `requirements.txt`; build the Docker image (no push) |
-| `frontend` | PR, main, schedule | `npm ci`; `ng test --no-watch` (Vitest); `npm audit --audit-level=high`; build the Docker image (no push) |
-| `changes` | PR, main, schedule | Looks at the files changed in the push or pull request and sets `infra=true` only if something under `infra/` changed (a new branch or force-push counts as changed; scheduled runs do not) |
-| `terraform-plan` | only when `infra/` changed | `terraform fmt -check`, `init`, `validate`, `plan` against production with the read-only role `app-github-terraform-plan`; the plan is written to the job summary. On `main`, a plan with changes is kept as an artifact for the apply job |
-| `terraform-apply` | pushes to `main` when `infra/` changed and the plan has changes | Runs in the `production-infra` environment (required reviewers), assumes `app-github-terraform-apply`, and applies exactly the saved plan. Skipped when there is nothing to change |
-| `publish` (matrix: 4 backends + frontend) | pushes to `main` only, after tests, scans and the Terraform step succeed (an apply that was skipped for "no changes" counts as success) | Assume the AWS role through OIDC; build; Trivy scan (fails on fixable HIGH/CRITICAL); push `app/<service>:<git sha>`; sign the image digest with cosign (keyless); write the digest to the job summary |
-| `bump-digests` | after `publish` succeeds | Look up the digest of each image tagged with the commit SHA; `cosign verify` that this workflow signed it; rewrite the digests in `deploy/envs/prod.yaml` (`.github/scripts/bump_digests.py`); push branch `automation/bump-digests` and open or update a single pull request |
+| Stage | Job (name in the Actions UI) | Runs for | What it does |
+|---|---|---|---|
+| 1 Detect | `Detect · infra changes` | PR, main, schedule | Looks at the files changed in the push or pull request and sets `infra=true` only if something under `infra/` changed (a new branch or force-push counts as changed; scheduled runs do not) |
+| 2 Test | `Test · backend1` ... `Test · backend4` | PR, main, schedule | Install pinned, hash-checked dependencies; `pytest`; `pip-audit` against `requirements.txt`; build the Docker image (no push) |
+| 2 Test | `Test · frontend` | PR, main, schedule | `npm ci`; `ng test --no-watch` (Vitest); `npm audit --audit-level=high`; build the Docker image (no push) |
+| 3 Infra | `Infra · terraform plan` | only when `infra/` changed | `terraform fmt -check`, `init`, `validate`, `plan` against production with the read-only role `app-github-terraform-plan`; the plan is written to the job summary. On `main`, a plan with changes is kept as an artifact for the apply job |
+| 3 Infra | `Infra · terraform apply (needs approval)` | pushes to `main` when `infra/` changed and the plan has changes | Runs in the `production-infra` environment (required reviewers), assumes `app-github-terraform-apply`, and applies exactly the saved plan. Skipped when there is nothing to change |
+| 4 Release | `Release · publish backend1` ... `Release · publish frontend` | pushes to `main`, after tests, scans and the Infra stage succeed (a skipped Terraform job counts as success) | Assume the AWS role through OIDC; build; Trivy scan (fails on fixable HIGH/CRITICAL); push `app/<service>:<git sha>`; sign the image digest with cosign (keyless, skipped if that digest is already signed); write the digest to the job summary |
+| 5 Deploy | `Deploy · open digest-bump PR` | after Release succeeds | Look up the digest of each image tagged with the commit SHA; `cosign verify` that this workflow signed it; rewrite the digests in `deploy/envs/prod.yaml` (`.github/scripts/bump_digests.py`); push branch `automation/bump-digests` and open or update a single pull request |
+
+Job ids in the workflow file: `detect-changes`, `test-backend`, `test-frontend`, `terraform-plan`,
+`terraform-apply`, `publish-image`, `open-deploy-pr`. The shared Terraform setup (install plus the
+API CIDR handling) is the local action `.github/actions/setup-terraform`.
 
 ### How CI authenticates to AWS
 
-No AWS keys are stored in GitHub. The `publish` job requests a short-lived OIDC token and assumes
+No AWS keys are stored in GitHub. The Release jobs request a short-lived OIDC token and assumes
 `app-github-ecr-push`. The role trusts only this repository's `main` branch and can only push to
 the five `app/*` ECR repositories. Pull requests and other branches cannot assume it.
 
 ### Things to know
 
-* **Tags are immutable.** The image tag is the commit SHA. Re-running `publish` for a commit that
+* **Tags are immutable.** The image tag is the commit SHA. Re-running `Release · publish ...` for a commit that
   was already published fails at the push step; push a new commit instead.
 * **Failures are meaningful.** A Trivy or audit failure means a fixable HIGH/CRITICAL finding.
   Fix the dependency or base image rather than loosening the scan.
@@ -162,15 +166,15 @@ npx ng test --no-watch
 
 | Symptom | Likely cause | What to do |
 |---|---|---|
-| `publish` fails: "Not authorized to perform sts:AssumeRoleWithWebIdentity" | Repository/branch or owner/repo IDs don't match the role trust | Check the subject in CloudTrail (`AssumeRoleWithWebIdentity` events) against `github_owner_id` / `github_repo_id` in `prod` |
-| `publish` fails at push: "tag invalid: ... immutable" | The commit was already published | Push a new commit |
-| `bump-digests` fails: "GitHub Actions is not permitted to create or approve pull requests" | Repository setting is off | Enable it under Settings -> Actions -> General |
-| `bump-digests` fails at `cosign verify` | An image for that commit was not signed by this workflow | Check the `publish` run for that commit; do not deploy the image |
+| `Release · publish` fails: "Not authorized to perform sts:AssumeRoleWithWebIdentity" | Repository/branch or owner/repo IDs don't match the role trust | Check the subject in CloudTrail (`AssumeRoleWithWebIdentity` events) against `github_owner_id` / `github_repo_id` in `prod` |
+| `Release · publish` fails at push: "tag invalid: ... immutable" | The commit was already published | Push a new commit |
+| `Deploy · open digest-bump PR` fails: "GitHub Actions is not permitted to create or approve pull requests" | Repository setting is off | Enable it under Settings -> Actions -> General |
+| `Deploy · open digest-bump PR` fails at `cosign verify` | An image for that commit was not signed by this workflow | Check the Release jobs for that commit; do not deploy the image |
 | Trivy step fails | Fixable HIGH/CRITICAL vulnerability in an image | Read the report; bump the base image digest or the dependency |
 | Pods `CreateContainerConfigError` | `database` Secret not created yet | `kubectl describe externalsecret database -n app`; check the `app` Application sync result |
 | Frontend returns 504 on `/api/...` | NetworkPolicy blocking ClusterIP traffic | Confirm `serviceCidr` matches the cluster's Service CIDR (`kubectl get svc kubernetes`) |
-| `terraform-plan` fails to assume its role | The CI roles do not exist yet, or the OIDC subject does not match | Apply Terraform locally once (see "One-time setup"); check `github_owner_id` / `github_repo_id` |
-| `terraform-apply` waits forever | The `production-infra` environment needs a reviewer to approve | Approve the deployment in the Actions run |
+| `Infra · terraform plan` fails to assume its role | The CI roles do not exist yet, or the OIDC subject does not match | Apply Terraform locally once (see "One-time setup"); check `github_owner_id` / `github_repo_id` |
+| `Infra · terraform apply` waits forever | The `production-infra` environment needs a reviewer to approve | Approve the deployment in the Actions run |
 | Plan wants to change something unexpected | Local `apply` or a console change drifted from the code | Read the plan; fix the code or revert the drift, do not approve blindly |
 | `kubectl` times out | Your public IP is not in `api_allowed_cidrs` | Update `terraform.tfvars` and apply |
 | Argo CD `app` stuck `Progressing` on a new cluster | First-sync race with the load balancer controller webhook | Terminate the sync operation and sync again |

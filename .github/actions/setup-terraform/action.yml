@@ -1,0 +1,36 @@
+name: Set up Terraform
+description: Installs Terraform and exports the Kubernetes API CIDRs (from the repository secret) as TF_VAR_api_allowed_cidrs.
+
+inputs:
+  api-allowed-cidrs:
+    description: JSON list (["1.2.3.4/32"]) or plain comma-separated list of CIDRs.
+    required: true
+  terraform-version:
+    description: Terraform version to install.
+    default: "1.16.5"
+
+runs:
+  using: composite
+  steps:
+    - name: Install Terraform
+      uses: hashicorp/setup-terraform@v3
+      with:
+        terraform_version: ${{ inputs.terraform-version }}
+        terraform_wrapper: false
+
+    - name: Export TF_VAR_api_allowed_cidrs
+      shell: bash
+      env:
+        CIDRS: ${{ inputs.api-allowed-cidrs }}
+      run: |
+        v="$(echo "$CIDRS" | tr -d ' \n')"
+        if [ -z "$v" ]; then
+          echo "::error::Repository secret TF_API_ALLOWED_CIDRS is empty or missing"
+          exit 1
+        fi
+        # Terraform parses TF_VAR_* as HCL: turn a bare "1.2.3.4/32,5.6.7.8/32" into a list
+        case "$v" in
+          \[*) ;;
+          *) v="[\"${v//,/\",\"}\"]" ;;
+        esac
+        echo "TF_VAR_api_allowed_cidrs=$v" >> "$GITHUB_ENV"
