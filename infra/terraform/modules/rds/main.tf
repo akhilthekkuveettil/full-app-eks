@@ -39,6 +39,9 @@ resource "aws_db_parameter_group" "this" {
   parameter {
     name  = "rds.force_ssl"
     value = "1"
+    # RDS stores this as pending-reboot; the provider default ("immediate") would show a
+    # permanent diff on every plan
+    apply_method = "pending-reboot"
   }
 
   lifecycle {
