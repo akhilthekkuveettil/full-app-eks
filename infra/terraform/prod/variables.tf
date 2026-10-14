@@ -24,3 +24,15 @@ variable "services" {
   type    = list(string)
   default = ["backend1", "backend2", "backend3", "backend4", "frontend"]
 }
+
+variable "github_owner_id" {
+  description = "Numeric id of the GitHub account that owns the repo (see the sub claim in CloudTrail/the OIDC token)."
+  type        = number
+  default     = 78824931
+}
+
+variable "github_repo_id" {
+  description = "Numeric id of the GitHub repository."
+  type        = number
+  default     = 1418427233
+}

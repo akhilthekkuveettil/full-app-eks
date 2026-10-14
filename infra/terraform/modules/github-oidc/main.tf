@@ -4,6 +4,17 @@ resource "aws_iam_openid_connect_provider" "github" {
   client_id_list = ["sts.amazonaws.com"]
 }
 
+locals {
+  owner = split("/", var.github_repo)[0]
+  repo  = split("/", var.github_repo)[1]
+
+  # Newer GitHub accounts put immutable numeric ids in the subject:
+  #   repo:<owner>@<owner_id>/<repo>@<repo_id>:ref:refs/heads/<branch>
+  # Using the ids also stops a deleted-and-recreated repo with the same name from matching.
+  use_ids = var.github_owner_id != null && var.github_repo_id != null
+  subject = local.use_ids ? "repo:${local.owner}@${var.github_owner_id}/${local.repo}@${var.github_repo_id}:ref:refs/heads/${var.branch}" : "repo:${var.github_repo}:ref:refs/heads/${var.branch}"
+}
+
 data "aws_iam_policy_document" "github_trust" {
   statement {
     actions = ["sts:AssumeRoleWithWebIdentity"]
@@ -20,7 +31,7 @@ data "aws_iam_policy_document" "github_trust" {
     condition {
       test     = "StringEquals"
       variable = "token.actions.githubusercontent.com:sub"
-      values   = ["repo:${var.github_repo}:ref:refs/heads/${var.branch}"]
+      values   = [local.subject]
     }
   }
 }

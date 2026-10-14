@@ -15,6 +15,8 @@ module "github_oidc" {
   source = "../modules/github-oidc"
 
   github_repo         = var.github_repo
+  github_owner_id     = var.github_owner_id
+  github_repo_id      = var.github_repo_id
   ecr_repository_arns = module.ecr.repository_arns
 }
 
