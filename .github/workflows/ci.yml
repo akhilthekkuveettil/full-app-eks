@@ -107,7 +107,6 @@ jobs:
       changes: ${{ steps.plan.outputs.changes }}
     env:
       TF_IN_AUTOMATION: "1"
-      TF_VAR_api_allowed_cidrs: ${{ secrets.TF_API_ALLOWED_CIDRS }}
     defaults:
       run:
         working-directory: infra/terraform/prod
@@ -118,6 +117,22 @@ jobs:
         with:
           terraform_version: 1.16.5
           terraform_wrapper: false
+
+      - name: Kubernetes API CIDRs from the secret
+        env:
+          CIDRS: ${{ secrets.TF_API_ALLOWED_CIDRS }}
+        run: |
+          v="$(echo "$CIDRS" | tr -d ' \n')"
+          if [ -z "$v" ]; then
+            echo "::error::Repository secret TF_API_ALLOWED_CIDRS is empty or missing"
+            exit 1
+          fi
+          # accept a JSON list (["1.2.3.4/32"]) or a plain comma-separated list (1.2.3.4/32,5.6.7.8/32)
+          case "$v" in
+            \[*) ;;
+            *) v="[\"${v//,/\",\"}\"]" ;;
+          esac
+          echo "TF_VAR_api_allowed_cidrs=$v" >> "$GITHUB_ENV"
 
       - name: Format check
         run: terraform fmt -check -recursive -diff ..
@@ -167,7 +182,6 @@ jobs:
       id-token: write
     env:
       TF_IN_AUTOMATION: "1"
-      TF_VAR_api_allowed_cidrs: ${{ secrets.TF_API_ALLOWED_CIDRS }}
     defaults:
       run:
         working-directory: infra/terraform/prod
@@ -178,6 +192,22 @@ jobs:
         with:
           terraform_version: 1.16.5
           terraform_wrapper: false
+
+      - name: Kubernetes API CIDRs from the secret
+        env:
+          CIDRS: ${{ secrets.TF_API_ALLOWED_CIDRS }}
+        run: |
+          v="$(echo "$CIDRS" | tr -d ' \n')"
+          if [ -z "$v" ]; then
+            echo "::error::Repository secret TF_API_ALLOWED_CIDRS is empty or missing"
+            exit 1
+          fi
+          # accept a JSON list (["1.2.3.4/32"]) or a plain comma-separated list (1.2.3.4/32,5.6.7.8/32)
+          case "$v" in
+            \[*) ;;
+            *) v="[\"${v//,/\",\"}\"]" ;;
+          esac
+          echo "TF_VAR_api_allowed_cidrs=$v" >> "$GITHUB_ENV"
 
       - uses: aws-actions/configure-aws-credentials@v4
         with:
