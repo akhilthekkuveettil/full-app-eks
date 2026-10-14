@@ -63,3 +63,9 @@ variable "app_hostname" {
   type    = string
   default = "app.officialkart.in"
 }
+
+variable "create_app_dns_record" {
+  description = "Create the Route 53 alias record. Enable once the Ingress has created its ALB."
+  type        = bool
+  default     = true
+}

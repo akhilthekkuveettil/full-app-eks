@@ -80,3 +80,25 @@ module "app_cert" {
   domain_name = var.app_hostname
   zone_id     = var.hosted_zone_id
 }
+
+# ---- DNS: points the hostname at the ALB that the Ingress created --------------
+# The ALB is created by the AWS Load Balancer Controller from the Ingress (not by Terraform),
+# so it is looked up by the tag the controller puts on it. Set create_app_dns_record = false
+# on a fresh cluster until the Ingress has an address.
+data "aws_lb" "app" {
+  count = var.create_app_dns_record ? 1 : 0
+
+  tags = {
+    "ingress.k8s.aws/stack" = "app/app"
+  }
+}
+
+module "app_dns" {
+  count  = var.create_app_dns_record ? 1 : 0
+  source = "../modules/dns-alias"
+
+  zone_id         = var.hosted_zone_id
+  name            = var.app_hostname
+  target_dns_name = data.aws_lb.app[0].dns_name
+  target_zone_id  = data.aws_lb.app[0].zone_id
+}

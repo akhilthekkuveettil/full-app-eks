@@ -10,6 +10,7 @@ modules/
   eks/            EKS cluster, managed node group, IRSA OIDC provider, core add-ons
   irsa-role/      IAM role assumable by one Kubernetes service account
   acm-cert/       ACM certificate validated through Route 53
+  dns-alias/      Route 53 alias record to a load balancer
   rds/            Postgres on RDS (private, encrypted, TLS-only, RDS-managed password in Secrets Manager)
   github-oidc/    GitHub OIDC provider + role that can push to ECR from one repo/branch
 bootstrap/        applies state-bucket (local state, run once)
