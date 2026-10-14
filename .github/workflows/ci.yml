@@ -5,7 +5,7 @@
 #
 # * Pull requests run Detect, Test and (when infra/ changed) the read-only Terraform plan.
 # * Pushes to main continue through Release and Deploy.
-# * Deploy waits for approval on the "production" environment, then commits the new image
+# * Deploy waits for approval on the "production-infra" environment, then commits the new image
 #   digests straight to main; Argo CD syncs deploy/ from main.
 #
 # Keep this file named ci.yml: image signatures are verified against this workflow's identity.
@@ -428,7 +428,7 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add deploy/envs/prod.yaml
           git commit -m "deploy: production uses images built from $short" \
-                     -m "Approved on the production environment. Source commit: ${{ github.server_url }}/${{ github.repository }}/commit/$GITHUB_SHA" \
+                     -m "Approved on the production-infra environment. Source commit: ${{ github.server_url }}/${{ github.repository }}/commit/$GITHUB_SHA" \
                      -m "Roll back by reverting this commit."
 
           # main may have moved while this job waited for approval
