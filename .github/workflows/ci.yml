@@ -152,7 +152,18 @@ jobs:
       - uses: sigstore/cosign-installer@v3.7.0
 
       - name: Sign image (keyless)
-        run: cosign sign --yes "${{ steps.ecr.outputs.registry }}/app/${{ matrix.service }}@${{ steps.push.outputs.digest }}"
+        run: |
+          image="${{ steps.ecr.outputs.registry }}/app/${{ matrix.service }}@${{ steps.push.outputs.digest }}"
+          # An unchanged service rebuilds to the same digest, whose signature tag already exists
+          # (tags are immutable), so only sign when this workflow has not signed the digest yet.
+          if cosign verify \
+            --certificate-identity "https://github.com/${{ github.repository }}/.github/workflows/ci.yml@refs/heads/main" \
+            --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+            "$image" > /dev/null 2>&1; then
+            echo "Already signed by this workflow: $image"
+          else
+            cosign sign --yes "$image"
+          fi
 
       - name: Summary
         run: |
