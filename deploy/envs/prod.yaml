@@ -1,9 +1,9 @@
 # Values for the app chart in production. CI updates the digests.
 backends:
-  backend1: { digest: "sha256:d3cf89584420d0fc566a12a520624c2ca3de97f8e6eaef75d8b046a52b44c704" }
-  backend2: { digest: "sha256:92fbc40c4a43272d8585a4059e69f2eea0c0141613ec3696482ac8e72b56541d" }
-  backend3: { digest: "sha256:41e2d149096ac5a43e8ce41c2734fb747bff3ec83c35d353af99dcf428435a38" }
-  backend4: { digest: "sha256:d15d4e6c3c1a60de191f83711e61b5d6e69dc15f8b52c32fc9fd14c83028d9d7" }
+  backend1: { digest: "sha256:55cb7c8efaa4c1484a8aea64d150b8971864755ff72a8428fc74ddddeddd7d78" }
+  backend2: { digest: "sha256:84872ccc282d577dde2578abc768dc84600a5697efad6fbfa7d4350b9a11db33" }
+  backend3: { digest: "sha256:8aa0a9f3eae65168cac1c405b61ac84e706080da9fbb3f39a160d740344c63f4" }
+  backend4: { digest: "sha256:dea3bae7b7ede0fa4c471d6be6a95595ca1b3b3bce8129b5ecfc9389c51981aa" }
 
 frontend:
   digest: "sha256:17b85b9a81913d28599efda14709bf3111344c56a27376bdfa34bbc79f206836"
