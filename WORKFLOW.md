@@ -6,17 +6,18 @@ For what the infrastructure is, see [INFRASTRUCTURE.md](INFRASTRUCTURE.md).
 ## The path of a change
 
 ```
- feature branch / PR            main                                    cluster
- -------------------            ----                                    -------
- tests + dependency scan  --->  tests + scan + build   --->  publish    update digests     Argo CD
- + image build (no push)        (same as PR)                (push+sign)  in envs/prod.yaml  syncs app
+ feature branch / PR            main                                          cluster
+ -------------------            ----                                          -------
+ tests + dependency scan  --->  tests + scan + build  --->  publish  --->  bump PR    merge   Argo CD
+ + image build (no push)        (same as PR)               push+sign       (digests)  (deploy) syncs app
 ```
 
 1. **Open a pull request.** CI runs tests, dependency scans and image builds. Nothing is pushed.
 2. **Merge to `main`.** CI runs again and then the `publish` job pushes signed images to ECR.
-3. **Point the deployment at the new images** by updating the digests in
-   `deploy/envs/prod.yaml` (currently a manual step, see below).
-4. **Argo CD syncs** the change from `main` to the cluster automatically.
+3. **A digest-bump pull request opens automatically** (`bump-digests` job). It points
+   `deploy/envs/prod.yaml` at the images that were just published, after verifying their cosign
+   signatures.
+4. **Merge that pull request to deploy.** Argo CD syncs `deploy/` from `main` to the cluster.
 
 ## CI: `.github/workflows/ci.yml`
 
@@ -29,6 +30,7 @@ the older run.
 | `backend` (matrix: backend1-4) | PR, main, schedule | Install pinned, hash-checked dependencies; `pytest`; `pip-audit` against `requirements.txt`; build the Docker image (no push) |
 | `frontend` | PR, main, schedule | `npm ci`; `ng test --no-watch` (Vitest); `npm audit --audit-level=high`; build the Docker image (no push) |
 | `publish` (matrix: 4 backends + frontend) | pushes to `main` only, after the two jobs above succeed | Assume the AWS role through OIDC; build; Trivy scan (fails on fixable HIGH/CRITICAL); push `app/<service>:<git sha>`; sign the image digest with cosign (keyless); write the digest to the job summary |
+| `bump-digests` | after `publish` succeeds | Look up the digest of each image tagged with the commit SHA; `cosign verify` that this workflow signed it; rewrite the digests in `deploy/envs/prod.yaml` (`.github/scripts/bump_digests.py`); push branch `automation/bump-digests` and open or update a single pull request |
 
 ### How CI authenticates to AWS
 
@@ -42,6 +44,13 @@ the five `app/*` ECR repositories. Pull requests and other branches cannot assum
   was already published fails at the push step; push a new commit instead.
 * **Failures are meaningful.** A Trivy or audit failure means a fixable HIGH/CRITICAL finding.
   Fix the dependency or base image rather than loosening the scan.
+* **Pushes that only touch `deploy/` or Markdown skip CI** (`paths-ignore`). This is what stops the
+  merged bump PR from publishing new images and opening another bump PR.
+* **One rolling PR.** `automation/bump-digests` is force-updated, so there is never more than one
+  open bump PR; it always reflects the newest published commit.
+* **Repository setting required:** Settings -> Actions -> General -> "Allow GitHub Actions to
+  create and approve pull requests". Pull requests opened with the built-in token do not trigger
+  other workflows, which is fine here because only `deploy/envs/prod.yaml` changes.
 * **Pinned actions.** Third-party actions are pinned to version tags; check they still resolve
   when a job fails with "unable to resolve action".
 
@@ -51,6 +60,9 @@ The deployment is described by `deploy/envs/prod.yaml`; Argo CD applies whatever
 
 ### Release a new build
 
+Normally there is nothing to do except review and merge the bump PR that CI opens. The manual
+equivalent, for example when CI is unavailable:
+
 ```bash
 # 1. find the digest CI pushed for a commit (replace SHA)
 for s in backend1 backend2 backend3 backend4 frontend; do
@@ -59,7 +71,9 @@ for s in backend1 backend2 backend3 backend4 frontend; do
     --image-ids imageTag=<SHA> --query 'imageDetails[0].imageDigest' --output text
 done
 
-# 2. put the digests into deploy/envs/prod.yaml, then commit and merge to main
+# 2. write them into deploy/envs/prod.yaml, then commit and merge to main
+python3 .github/scripts/bump_digests.py deploy/envs/prod.yaml \
+  backend1=sha256:... backend2=sha256:... backend3=sha256:... backend4=sha256:... frontend=sha256:...
 # 3. watch Argo CD roll it out
 kubectl get applications -n argocd
 kubectl rollout status deployment/backend1 -n app
@@ -126,6 +140,8 @@ npx ng test --no-watch
 |---|---|---|
 | `publish` fails: "Not authorized to perform sts:AssumeRoleWithWebIdentity" | Repository/branch or owner/repo IDs don't match the role trust | Check the subject in CloudTrail (`AssumeRoleWithWebIdentity` events) against `github_owner_id` / `github_repo_id` in `prod` |
 | `publish` fails at push: "tag invalid: ... immutable" | The commit was already published | Push a new commit |
+| `bump-digests` fails: "GitHub Actions is not permitted to create or approve pull requests" | Repository setting is off | Enable it under Settings -> Actions -> General |
+| `bump-digests` fails at `cosign verify` | An image for that commit was not signed by this workflow | Check the `publish` run for that commit; do not deploy the image |
 | Trivy step fails | Fixable HIGH/CRITICAL vulnerability in an image | Read the report; bump the base image digest or the dependency |
 | Pods `CreateContainerConfigError` | `database` Secret not created yet | `kubectl describe externalsecret database -n app`; check the `app` Application sync result |
 | Frontend returns 504 on `/api/...` | NetworkPolicy blocking ClusterIP traffic | Confirm `serviceCidr` matches the cluster's Service CIDR (`kubectl get svc kubernetes`) |

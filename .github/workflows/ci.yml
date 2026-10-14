@@ -3,6 +3,11 @@ name: CI
 on:
   push:
     branches: [main]
+    # A digest-bump PR only edits deploy/; running CI for it would publish a new image,
+    # open another bump PR, and loop forever.
+    paths-ignore:
+      - "deploy/**"
+      - "**.md"
   pull_request:
   schedule:
     - cron: "0 6 * * 1" # weekly, so newly published CVEs are caught without a push
@@ -152,3 +157,84 @@ jobs:
       - name: Summary
         run: |
           echo "${{ matrix.service }}: ${{ steps.ecr.outputs.registry }}/app/${{ matrix.service }}@${{ steps.push.outputs.digest }}" >> "$GITHUB_STEP_SUMMARY"
+
+  # Opens (or updates) one pull request that points deploy/envs/prod.yaml at the images that
+  # were just published. Merging it is the production deploy: Argo CD syncs from main.
+  bump-digests:
+    name: open digest bump PR
+    needs: publish
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # push the bump branch
+      pull-requests: write # open / update the PR
+      id-token: write # OIDC to AWS (read digests) and cosign verification
+    env:
+      AWS_REGION: us-east-1
+      BRANCH: automation/bump-digests
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::426737295553:role/app-github-ecr-push
+          aws-region: ${{ env.AWS_REGION }}
+
+      - id: ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - uses: sigstore/cosign-installer@v3.7.0
+
+      - name: Resolve and verify digests for this commit
+        id: digests
+        run: |
+          pairs=""
+          for svc in backend1 backend2 backend3 backend4 frontend; do
+            digest=$(aws ecr describe-images --repository-name "app/$svc" \
+              --image-ids imageTag="$GITHUB_SHA" \
+              --query 'imageDetails[0].imageDigest' --output text)
+            image="${{ steps.ecr.outputs.registry }}/app/$svc@$digest"
+            # only images signed by this workflow on main may be deployed
+            cosign verify \
+              --certificate-identity "https://github.com/${{ github.repository }}/.github/workflows/ci.yml@refs/heads/main" \
+              --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+              "$image" > /dev/null
+            echo "$svc  $digest"
+            pairs="$pairs $svc=$digest"
+          done
+          echo "pairs=${pairs# }" >> "$GITHUB_OUTPUT"
+
+      - name: Update deploy/envs/prod.yaml
+        run: python3 .github/scripts/bump_digests.py deploy/envs/prod.yaml ${{ steps.digests.outputs.pairs }}
+
+      - name: Open or update the pull request
+        run: |
+          if git diff --quiet -- deploy/envs/prod.yaml; then
+            echo "Digests already current; nothing to deploy."
+            exit 0
+          fi
+
+          short="${GITHUB_SHA::7}"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout -B "$BRANCH"
+          git add deploy/envs/prod.yaml
+          git commit -m "deploy: use images built from $short"
+          git push --force origin "$BRANCH"
+
+          body="Points production at the images published from \`$short\` (all five signed by this workflow and verified with cosign).
+
+          Merging this PR deploys: Argo CD syncs \`deploy/\` from \`main\`.
+          Roll back by reverting the merge commit.
+
+          Source commit: ${{ github.server_url }}/${{ github.repository }}/commit/$GITHUB_SHA"
+
+          existing=$(gh pr list --head "$BRANCH" --state open --json number --jq '.[0].number // empty')
+          if [ -n "$existing" ]; then
+            gh pr edit "$existing" --title "Deploy images from $short" --body "$body"
+            echo "Updated PR #$existing"
+          else
+            gh pr create --head "$BRANCH" --base main \
+              --title "Deploy images from $short" --body "$body"
+          fi

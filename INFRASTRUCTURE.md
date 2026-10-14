@@ -205,7 +205,6 @@ Scaling nodes: change `node_*_size` in the `eks` module call and apply.
 
 ## Not done yet / next
 
-* Automatic digest bump (a CI job that opens a PR updating `deploy/envs/prod.yaml`).
 * Budget alert and CloudWatch alarms (pod restarts, ALB 5xx, RDS CPU / storage).
 * Dedicated least-privilege database user for the application instead of the RDS master user.
 * Multi-AZ RDS and one NAT gateway per AZ if availability requirements grow.
