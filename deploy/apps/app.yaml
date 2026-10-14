@@ -24,6 +24,8 @@ spec:
       - SkipDryRunOnMissingResource=true # ExternalSecret CRDs arrive via the external-secrets app
     managedNamespaceMetadata:
       labels:
+        # new pods are only Ready once the ALB reports their target healthy
+        elbv2.k8s.aws/pod-readiness-gate-inject: enabled
         pod-security.kubernetes.io/enforce: restricted
         pod-security.kubernetes.io/audit: restricted
         pod-security.kubernetes.io/warn: restricted

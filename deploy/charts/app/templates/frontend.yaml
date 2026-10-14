@@ -5,6 +5,11 @@ metadata:
   labels: { app: frontend, tier: frontend }
 spec:
   replicas: {{ .Values.replicas }}
+  # never remove a pod before its replacement is Ready (and registered healthy in the ALB)
+  strategy:
+    type: RollingUpdate
+    rollingUpdate: { maxSurge: 1, maxUnavailable: 0 }
+  minReadySeconds: 5
   selector:
     matchLabels: { app: frontend }
   template:
@@ -12,6 +17,7 @@ spec:
       labels: { app: frontend, tier: frontend }
     spec:
       automountServiceAccountToken: false
+      terminationGracePeriodSeconds: 45
       securityContext:
         {{- include "app.podSecurityContext" . | nindent 8 }}
         runAsUser: 101
@@ -38,6 +44,12 @@ spec:
             httpGet: { path: /, port: http }
             initialDelaySeconds: 10
             periodSeconds: 20
+          lifecycle:
+            preStop:
+              # keep serving until the load balancer and Services have dropped this pod, then
+              # stop nginx gracefully (SIGTERM alone would cut in-flight requests)
+              exec:
+                command: ["sh", "-c", "sleep {{ .Values.preStopSleepSeconds }}; nginx -s quit; sleep 5"]
           resources:
             requests: { cpu: 25m, memory: 32Mi }
             limits: { memory: 128Mi }

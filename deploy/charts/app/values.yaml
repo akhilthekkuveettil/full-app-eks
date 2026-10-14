@@ -12,6 +12,10 @@ frontend:
 
 replicas: 2
 
+# Seconds a terminating pod keeps serving before SIGTERM, so the ALB and kube-proxy stop sending
+# it traffic first. Must stay below terminationGracePeriodSeconds (45).
+preStopSleepSeconds: 15
+
 database:
   # RDS endpoint and the Secrets Manager secret (RDS-managed master credentials) it is read from
   host: ""
