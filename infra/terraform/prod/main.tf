@@ -103,7 +103,7 @@ module "app_dns" {
   target_zone_id  = data.aws_lb.app[0].zone_id
 }
 
-# ---- Argo CD UI at its own hostname, reachable only from allowed CIDRs -------------
+# ---- Argo CD UI at its own hostname, reachable from argocd_allowed_cidrs -------------
 
 module "argocd_cert" {
   source = "../modules/acm-cert"
@@ -117,7 +117,7 @@ module "argocd_alb_sg" {
 
   name          = "${var.cluster_name}-argocd-alb"
   vpc_id        = module.vpc.vpc_id
-  allowed_cidrs = coalesce(var.argocd_allowed_cidrs, var.api_allowed_cidrs)
+  allowed_cidrs = var.argocd_allowed_cidrs
 }
 
 data "aws_lb" "argocd" {

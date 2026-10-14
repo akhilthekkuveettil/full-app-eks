@@ -101,7 +101,7 @@ replace is still disruptive.
 | ECR | Immutable tags, scan on push, AES256, keep the 10 most recent images per repository |
 | CI access | GitHub OIDC provider and role `app-github-ecr-push`. Trust is pinned to this repository's `main` branch using GitHub's immutable owner/repo IDs; permissions are ECR push to the five `app/*` repositories only |
 | TLS / DNS | ACM certificates for `app.officialkart.in` and `argocd.officialkart.in` (DNS-validated in Route 53) and alias records to the ALBs the Ingresses create |
-| Argo CD access | Own ALB whose security group (`alb-security-group` module) allows 80/443 only from `argocd_allowed_cidrs` (defaults to `api_allowed_cidrs`); the CIDRs live in the git-ignored `terraform.tfvars`, never in git |
+| Argo CD access | Own ALB whose security group (`alb-security-group` module) allows 80/443 from `argocd_allowed_cidrs`, currently `0.0.0.0/0` (open by decision; set it to specific CIDRs in `terraform.tfvars` to restrict) |
 
 ## Kubernetes layer (`deploy/`)
 
@@ -163,7 +163,7 @@ These are estimates; check the AWS pricing calculator and set a budget alert.
 # kubectl access (your IP must be in api_allowed_cidrs)
 aws eks update-kubeconfig --region us-east-1 --name app-prod
 
-# Argo CD UI: https://argocd.officialkart.in (only from the allowed CIDRs), or locally:
+# Argo CD UI: https://argocd.officialkart.in (open to the internet, protected by Argo's login), or locally:
 kubectl -n argocd port-forward svc/argocd-server 8443:443        # https://localhost:8443
 kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath='{.data.password}' | base64 -d; echo
 
@@ -200,8 +200,8 @@ Scaling nodes: change `node_*_size` in the `eks` module call and apply.
   interval is pushed to the 1000-day maximum for now; AWS documents the schedule as changeable
   but not as removable. Reloader is installed so rotation can be turned on safely by lowering
   `rotation_interval_days` in the `rds` module.
-* **Argo CD admin password** is the auto-generated initial secret. Change it or disable the
-  admin account before sharing access.
+* **Argo CD admin password** is the auto-generated initial secret, and the UI is reachable from
+  the internet. Change the password immediately and consider SSO and disabling the `admin` account.
 
 ## Not done yet / next
 

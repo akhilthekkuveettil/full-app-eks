@@ -76,9 +76,9 @@ variable "argocd_hostname" {
 }
 
 variable "argocd_allowed_cidrs" {
-  description = "CIDRs allowed to open the Argo CD UI. Defaults to api_allowed_cidrs."
+  description = "CIDRs allowed to open the Argo CD UI. Open to the internet by choice; authentication is Argo CD's own login. Set to your IP(s) to restrict."
   type        = list(string)
-  default     = null
+  default     = ["0.0.0.0/0"]
 }
 
 variable "create_argocd_dns_record" {

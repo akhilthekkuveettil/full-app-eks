@@ -1,5 +1,5 @@
-# Argo CD UI behind its own ALB. Access is limited by the security group created in Terraform
-# (argocd_alb_security_group_id), so no IP addresses are stored in git.
+# Argo CD UI behind its own ALB. Who can reach it is controlled by the security group created in
+# Terraform (argocd_alb_security_group_id / argocd_allowed_cidrs).
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
