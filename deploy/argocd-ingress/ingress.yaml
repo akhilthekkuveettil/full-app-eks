@@ -8,9 +8,9 @@ metadata:
   annotations:
     alb.ingress.kubernetes.io/scheme: internet-facing
     alb.ingress.kubernetes.io/target-type: ip
-    alb.ingress.kubernetes.io/security-groups: REPLACE_ARGOCD_ALB_SG_ID
+    alb.ingress.kubernetes.io/security-groups: sg-0c14af032622ad9c2
     alb.ingress.kubernetes.io/manage-backend-security-group-rules: "true"
-    alb.ingress.kubernetes.io/certificate-arn: REPLACE_ARGOCD_CERT_ARN
+    alb.ingress.kubernetes.io/certificate-arn: arn:aws:acm:us-east-1:426737295553:certificate/998cb5ed-edd5-42e8-9eb1-57e9583e189d
     alb.ingress.kubernetes.io/listen-ports: '[{"HTTP":80},{"HTTPS":443}]'
     alb.ingress.kubernetes.io/ssl-redirect: "443"
     alb.ingress.kubernetes.io/ssl-policy: ELBSecurityPolicy-TLS13-1-2-2021-06
