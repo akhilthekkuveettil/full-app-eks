@@ -13,6 +13,7 @@ modules/
   acm-cert/       ACM certificate validated through Route 53
   dns-alias/      Route 53 alias record to a load balancer
   rds/            Postgres on RDS (private, encrypted, TLS-only, RDS-managed password in Secrets Manager)
+  github-actions-role/ IAM role for GitHub Actions limited to given OIDC subjects
   github-oidc/    GitHub OIDC provider + role that can push to ECR from one repo/branch
 bootstrap/        applies state-bucket (local state, run once)
 prod/             applies vpc + eks + ecr + rds + github-oidc (state in the bucket above)

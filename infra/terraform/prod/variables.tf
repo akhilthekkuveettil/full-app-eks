@@ -82,7 +82,13 @@ variable "argocd_allowed_cidrs" {
 }
 
 variable "create_argocd_dns_record" {
-  description = "Create the Route 53 alias record. Enable once the Argo CD Ingress has created its ALB."
+  description = "Create the Route 53 alias record. Needs the Argo CD Ingress to have created its ALB; set to false on a brand-new cluster until it exists."
   type        = bool
-  default     = false
+  default     = true
+}
+
+variable "state_bucket" {
+  description = "Terraform state bucket (created by ../bootstrap)."
+  type        = string
+  default     = "app-tfstate-426737295553-use1"
 }

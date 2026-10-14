@@ -94,12 +94,120 @@ jobs:
           cache-from: type=gha,scope=frontend
           cache-to: type=gha,mode=max,scope=frontend
 
-  # Only on pushes to main, after tests and dependency scans pass.
+  # Infrastructure runs before anything is deployed: plan on every PR and push (read-only role),
+  # apply only on main, only when the plan has changes, and only after approval on the
+  # "production-infra" environment. The reviewed plan file is what gets applied.
+  terraform-plan:
+    name: terraform plan
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    outputs:
+      changes: ${{ steps.plan.outputs.changes }}
+    env:
+      TF_IN_AUTOMATION: "1"
+      TF_VAR_api_allowed_cidrs: ${{ secrets.TF_API_ALLOWED_CIDRS }}
+    defaults:
+      run:
+        working-directory: infra/terraform/prod
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.16.5
+          terraform_wrapper: false
+
+      - name: Format check
+        run: terraform fmt -check -recursive -diff ..
+
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::426737295553:role/app-github-terraform-plan
+          aws-region: us-east-1
+
+      - run: terraform init -input=false
+
+      - run: terraform validate
+
+      - name: Plan
+        id: plan
+        run: |
+          set +e
+          terraform plan -input=false -lock-timeout=120s -detailed-exitcode -out=tfplan
+          code=$?
+          set -e
+          if [ "$code" -eq 1 ]; then exit 1; fi
+          if [ "$code" -eq 2 ]; then echo "changes=true" >> "$GITHUB_OUTPUT"; else echo "changes=false" >> "$GITHUB_OUTPUT"; fi
+          {
+            echo '### Terraform plan'
+            if [ "$code" -eq 2 ]; then echo 'Changes detected:'; else echo 'No changes.'; fi
+            echo '```'
+            terraform show -no-color tfplan | head -c 60000
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Keep the plan for the apply job
+        if: steps.plan.outputs.changes == 'true' && github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: actions/upload-artifact@v4
+        with:
+          name: tfplan
+          path: infra/terraform/prod/tfplan
+          retention-days: 1
+
+  terraform-apply:
+    name: terraform apply
+    needs: terraform-plan
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && needs.terraform-plan.outputs.changes == 'true'
+    runs-on: ubuntu-latest
+    environment: production-infra
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      TF_IN_AUTOMATION: "1"
+      TF_VAR_api_allowed_cidrs: ${{ secrets.TF_API_ALLOWED_CIDRS }}
+    defaults:
+      run:
+        working-directory: infra/terraform/prod
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.16.5
+          terraform_wrapper: false
+
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::426737295553:role/app-github-terraform-apply
+          aws-region: us-east-1
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: tfplan
+          path: infra/terraform/prod
+
+      - run: terraform init -input=false
+
+      # a plan applies only if state has not changed since it was made, otherwise Terraform refuses
+      - name: Apply the reviewed plan
+        run: terraform apply -input=false -lock-timeout=120s tfplan
+
+  # Only on pushes to main, after tests, dependency scans and the infrastructure step pass.
   # Auth is GitHub OIDC -> IAM role limited to this repo's main branch and ECR push.
   publish:
     name: publish ${{ matrix.service }}
-    needs: [backend, frontend]
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: [backend, frontend, terraform-plan, terraform-apply]
+    # terraform-apply is skipped when the plan has no changes; that still counts as ready
+    if: >-
+      ${{ !cancelled()
+      && github.event_name == 'push' && github.ref == 'refs/heads/main'
+      && needs.backend.result == 'success'
+      && needs.frontend.result == 'success'
+      && needs.terraform-plan.result == 'success'
+      && (needs.terraform-apply.result == 'success' || needs.terraform-apply.result == 'skipped') }}
     runs-on: ubuntu-latest
     permissions:
       contents: read

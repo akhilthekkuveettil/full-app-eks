@@ -6,14 +6,17 @@ For what the infrastructure is, see [INFRASTRUCTURE.md](INFRASTRUCTURE.md).
 ## The path of a change
 
 ```
- feature branch / PR            main                                          cluster
- -------------------            ----                                          -------
- tests + dependency scan  --->  tests + scan + build  --->  publish  --->  bump PR    merge   Argo CD
- + image build (no push)        (same as PR)               push+sign       (digests)  (deploy) syncs app
+ feature branch / PR            main                                                 cluster
+ -------------------            ----                                                 -------
+ tests + dependency scan  --->  tests + scan + build  --->  terraform  --->  publish  --->  bump PR   merge   Argo CD
+ + image build (no push)        (same as PR)               plan/apply       push+sign       (digests) (deploy) syncs app
+ + terraform plan (read-only)                              (gated)
 ```
 
-1. **Open a pull request.** CI runs tests, dependency scans and image builds. Nothing is pushed.
-2. **Merge to `main`.** CI runs again and then the `publish` job pushes signed images to ECR.
+1. **Open a pull request.** CI runs tests, dependency scans, image builds and a read-only
+   `terraform plan`. Nothing is pushed or changed.
+2. **Merge to `main`.** CI runs again. If the Terraform plan has changes, a person approves the
+   apply first; then the `publish` job pushes signed images to ECR.
 3. **A digest-bump pull request opens automatically** (`bump-digests` job). It points
    `deploy/envs/prod.yaml` at the images that were just published, after verifying their cosign
    signatures.
@@ -29,7 +32,9 @@ the older run.
 |---|---|---|
 | `backend` (matrix: backend1-4) | PR, main, schedule | Install pinned, hash-checked dependencies; `pytest`; `pip-audit` against `requirements.txt`; build the Docker image (no push) |
 | `frontend` | PR, main, schedule | `npm ci`; `ng test --no-watch` (Vitest); `npm audit --audit-level=high`; build the Docker image (no push) |
-| `publish` (matrix: 4 backends + frontend) | pushes to `main` only, after the two jobs above succeed | Assume the AWS role through OIDC; build; Trivy scan (fails on fixable HIGH/CRITICAL); push `app/<service>:<git sha>`; sign the image digest with cosign (keyless); write the digest to the job summary |
+| `terraform-plan` | PR, main, schedule | `terraform fmt -check`, `init`, `validate`, `plan` against production with the read-only role `app-github-terraform-plan`; the plan is written to the job summary. On `main`, a plan with changes is kept as an artifact for the apply job |
+| `terraform-apply` | pushes to `main` when the plan has changes | Runs in the `production-infra` environment (required reviewers), assumes `app-github-terraform-apply`, and applies exactly the saved plan. Skipped when there is nothing to change |
+| `publish` (matrix: 4 backends + frontend) | pushes to `main` only, after tests, scans and the Terraform step succeed (an apply that was skipped for "no changes" counts as success) | Assume the AWS role through OIDC; build; Trivy scan (fails on fixable HIGH/CRITICAL); push `app/<service>:<git sha>`; sign the image digest with cosign (keyless); write the digest to the job summary |
 | `bump-digests` | after `publish` succeeds | Look up the digest of each image tagged with the commit SHA; `cosign verify` that this workflow signed it; rewrite the digests in `deploy/envs/prod.yaml` (`.github/scripts/bump_digests.py`); push branch `automation/bump-digests` and open or update a single pull request |
 
 ### How CI authenticates to AWS
@@ -96,7 +101,22 @@ cosign verify \
 
 ## Infrastructure changes
 
-Infrastructure is changed with Terraform from a workstation (there is no pipeline for it yet).
+Infrastructure changes go through the same pipeline: the PR shows the plan in the job summary,
+and after merge the apply runs once someone approves the `production-infra` environment. The
+infrastructure step always runs before images are published and deployed.
+
+### One-time setup for the pipeline
+
+1. Create the two CI roles by applying Terraform locally once (they cannot create themselves):
+   `cd infra/terraform/prod && terraform init -reconfigure && terraform apply`.
+2. GitHub: Settings -> Environments -> New environment `production-infra`; add required
+   reviewers and restrict "Deployment branches" to `main`.
+3. GitHub: Settings -> Secrets and variables -> Actions -> New repository secret
+   `TF_API_ALLOWED_CIDRS` with a JSON list, e.g. `["203.0.113.7/32"]` (the CIDRs allowed to reach
+   the Kubernetes API; the value that is in your local `terraform.tfvars`).
+4. Only then merge the workflow change, otherwise the Terraform jobs cannot assume their roles.
+
+### Local changes (when you need them)
 
 ```bash
 cd infra/terraform/prod
@@ -105,8 +125,9 @@ terraform plan                  # read it; look for replace / destroy
 terraform apply
 ```
 
-* Work on a branch, commit the Terraform together with any `deploy/` change that depends on it,
-  and merge after `apply` succeeded.
+* Prefer the pipeline. Local `apply` is for bootstrapping and emergencies; if you do apply
+  locally, merge the same code so the next CI plan shows no changes.
+* Work on a branch and commit the Terraform together with any `deploy/` change that depends on it.
 * Keep `terraform.tfvars` and state files out of git (already ignored).
 * Changes to what runs in the cluster (chart, add-ons, image digests) go through `deploy/` and
   Argo CD, not through `kubectl apply`. Argo CD reverts manual changes (`selfHeal`).
@@ -145,5 +166,8 @@ npx ng test --no-watch
 | Trivy step fails | Fixable HIGH/CRITICAL vulnerability in an image | Read the report; bump the base image digest or the dependency |
 | Pods `CreateContainerConfigError` | `database` Secret not created yet | `kubectl describe externalsecret database -n app`; check the `app` Application sync result |
 | Frontend returns 504 on `/api/...` | NetworkPolicy blocking ClusterIP traffic | Confirm `serviceCidr` matches the cluster's Service CIDR (`kubectl get svc kubernetes`) |
+| `terraform-plan` fails to assume its role | The CI roles do not exist yet, or the OIDC subject does not match | Apply Terraform locally once (see "One-time setup"); check `github_owner_id` / `github_repo_id` |
+| `terraform-apply` waits forever | The `production-infra` environment needs a reviewer to approve | Approve the deployment in the Actions run |
+| Plan wants to change something unexpected | Local `apply` or a console change drifted from the code | Read the plan; fix the code or revert the drift, do not approve blindly |
 | `kubectl` times out | Your public IP is not in `api_allowed_cidrs` | Update `terraform.tfvars` and apply |
 | Argo CD `app` stuck `Progressing` on a new cluster | First-sync race with the load balancer controller webhook | Terminate the sync operation and sync again |

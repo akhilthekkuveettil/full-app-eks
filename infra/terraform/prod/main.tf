@@ -137,3 +137,42 @@ module "argocd_dns" {
   target_dns_name = data.aws_lb.argocd[0].dns_name
   target_zone_id  = data.aws_lb.argocd[0].zone_id
 }
+
+# ---- Terraform from GitHub Actions --------------------------------------------
+# plan: read-only, may run on pull requests and on main. It may only write the state lock file.
+# apply: administrator, only for jobs that use the "production-infra" GitHub environment
+# (configure required reviewers and a main-only deployment branch rule on it).
+
+data "aws_iam_policy_document" "terraform_plan_lock" {
+  statement {
+    actions   = ["s3:PutObject", "s3:DeleteObject"]
+    resources = ["arn:aws:s3:::${var.state_bucket}/prod/terraform.tfstate.tflock"]
+  }
+}
+
+module "ci_terraform_plan" {
+  source = "../modules/github-actions-role"
+
+  name              = "app-github-terraform-plan"
+  oidc_provider_arn = module.github_oidc.provider_arn
+  github_repo       = var.github_repo
+  github_owner_id   = var.github_owner_id
+  github_repo_id    = var.github_repo_id
+  subject_suffixes  = ["pull_request", "ref:refs/heads/main"]
+
+  managed_policy_arns = ["arn:aws:iam::aws:policy/ReadOnlyAccess"]
+  inline_policy_json  = data.aws_iam_policy_document.terraform_plan_lock.json
+}
+
+module "ci_terraform_apply" {
+  source = "../modules/github-actions-role"
+
+  name              = "app-github-terraform-apply"
+  oidc_provider_arn = module.github_oidc.provider_arn
+  github_repo       = var.github_repo
+  github_owner_id   = var.github_owner_id
+  github_repo_id    = var.github_repo_id
+  subject_suffixes  = ["environment:production-infra"]
+
+  managed_policy_arns = ["arn:aws:iam::aws:policy/AdministratorAccess"]
+}

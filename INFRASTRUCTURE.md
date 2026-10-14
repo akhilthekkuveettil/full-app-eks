@@ -84,9 +84,10 @@ Kubernetes API:
 api_allowed_cidrs = ["<your public IP>/32"]
 ```
 
-Run `terraform init -reconfigure` first in a fresh checkout. `terraform plan` before every
-`apply`, and read the plan: the RDS instance has deletion protection and a final snapshot, but a
-replace is still disruptive.
+Run `terraform init -reconfigure` first in a fresh checkout. The CI pipeline plans on every PR
+and applies on `main` after approval (see [WORKFLOW.md](WORKFLOW.md)); read the plan before
+approving: the RDS instance has deletion protection and a final snapshot, but a replace is still
+disruptive. The Kubernetes API CIDRs reach CI through the `TF_API_ALLOWED_CIDRS` secret.
 
 ### What `prod` creates
 
@@ -99,7 +100,7 @@ replace is still disruptive.
 | IRSA | OIDC provider for the cluster; roles for the AWS Load Balancer Controller and External Secrets |
 | RDS | Encrypted, not publicly accessible, TLS enforced (`rds.force_ssl=1`), 7-day backups, deletion protection, master password managed by RDS in Secrets Manager (rotation interval pushed to 1000 days for now, see below). Security group allows 5432 only from the EKS cluster security group |
 | ECR | Immutable tags, scan on push, AES256, keep the 10 most recent images per repository |
-| CI access | GitHub OIDC provider and role `app-github-ecr-push`. Trust is pinned to this repository's `main` branch using GitHub's immutable owner/repo IDs; permissions are ECR push to the five `app/*` repositories only |
+| CI access | GitHub OIDC provider and three roles, all pinned to this repository by GitHub's immutable owner/repo IDs: `app-github-ecr-push` (ECR push to `app/*`, only from `main`), `app-github-terraform-plan` (ReadOnlyAccess plus the state lock file; pull requests and `main`) and `app-github-terraform-apply` (AdministratorAccess; only jobs using the `production-infra` environment) |
 | TLS / DNS | ACM certificates for `app.officialkart.in` and `argocd.officialkart.in` (DNS-validated in Route 53) and alias records to the ALBs the Ingresses create |
 | Argo CD access | Own ALB whose security group (`alb-security-group` module) allows 80/443 from `argocd_allowed_cidrs`, currently `0.0.0.0/0` (open by decision; set it to specific CIDRs in `terraform.tfvars` to restrict) |
 
@@ -200,6 +201,10 @@ Scaling nodes: change `node_*_size` in the `eks` module call and apply.
   interval is pushed to the 1000-day maximum for now; AWS documents the schedule as changeable
   but not as removable. Reloader is installed so rotation can be turned on safely by lowering
   `rotation_interval_days` in the `rds` module.
+* **The apply role is an administrator.** `app-github-terraform-apply` can change anything in
+  the account, so its safety rests on the `production-infra` environment (required reviewers,
+  `main`-only) and on code review. A PR cannot assume it. The plan role is read-only but can read
+  most account data, so treat PR authors accordingly.
 * **Argo CD admin password** is the auto-generated initial secret, and the UI is reachable from
   the internet. Change the password immediately and consider SSO and disabling the `admin` account.
 

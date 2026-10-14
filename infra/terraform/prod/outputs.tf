@@ -61,3 +61,11 @@ output "argocd_certificate_arn" {
 output "argocd_alb_security_group_id" {
   value = module.argocd_alb_sg.security_group_id
 }
+
+output "ci_terraform_plan_role_arn" {
+  value = module.ci_terraform_plan.role_arn
+}
+
+output "ci_terraform_apply_role_arn" {
+  value = module.ci_terraform_apply.role_arn
+}
