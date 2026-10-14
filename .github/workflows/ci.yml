@@ -1,11 +1,12 @@
 # CI/CD pipeline. Stages, in order:
 #
 #   Detect  ->  Test (backends + frontend)  ->  Infra (terraform plan / apply)
-#           ->  Release (scan, push, sign images)  ->  Deploy (open the digest-bump PR)
+#           ->  Release (scan, push, sign images)  ->  Deploy (approve, then commit to main)
 #
 # * Pull requests run Detect, Test and (when infra/ changed) the read-only Terraform plan.
 # * Pushes to main continue through Release and Deploy.
-# * Merging the digest-bump PR is the production deploy; Argo CD syncs deploy/ from main.
+# * Deploy waits for approval on the "production" environment, then commits the new image
+#   digests straight to main; Argo CD syncs deploy/ from main.
 #
 # Keep this file named ci.yml: image signatures are verified against this workflow's identity.
 name: CI
@@ -13,8 +14,8 @@ name: CI
 on:
   push:
     branches: [main]
-    # The digest-bump PR only edits deploy/. Running CI for it would publish new images and
-    # open another bump PR, forever.
+    # The deploy commit only edits deploy/. Running CI for it would publish new images and
+    # trigger another deploy, forever.
     paths-ignore:
       - "deploy/**"
       - "**.md"
@@ -351,23 +352,34 @@ jobs:
           echo "${{ matrix.service }}: ${{ steps.ecr.outputs.registry }}/app/${{ matrix.service }}@${{ steps.push.outputs.digest }}" >> "$GITHUB_STEP_SUMMARY"
 
   # ──────────────────────────────── 5. Deploy ──────────────────────────────
-  # Opens (or updates) one pull request that points deploy/envs/prod.yaml at the images that
-  # were just published. Merging it is the production deploy.
-  open-deploy-pr:
-    name: "Deploy · open digest-bump PR"
+  # A person approves on the "production" environment (required reviewers); then the digests of
+  # the images just published are committed to deploy/envs/prod.yaml on main and Argo CD syncs.
+  # Roll back by reverting that commit.
+  #
+  # The approval is a separate, empty job on purpose: a job that uses an environment gets an
+  # environment-based OIDC subject, and the AWS role trusts only the main-branch subject.
+  approve-production:
+    name: "Deploy · approval (production)"
     needs: publish-image
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
-    permissions:
-      contents: write # push the bump branch
-      pull-requests: write # open / update the PR
-      id-token: write # OIDC to AWS (read digests) and cosign verification
-    env:
-      BRANCH: automation/bump-digests
-      GH_TOKEN: ${{ github.token }}
+    environment: production
     steps:
-      - name: Check out code
+      - name: Approved
+        run: echo "Deployment of ${GITHUB_SHA::7} to production approved."
+
+  deploy-production:
+    name: "Deploy · commit digests to main"
+    needs: approve-production
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # commit the new digests to main
+      id-token: write # OIDC to AWS (read digests) and cosign verification
+    steps:
+      - name: Check out main
         uses: actions/checkout@v4
+        with:
+          ref: main
 
       - name: Configure AWS credentials (ECR push role)
         uses: aws-actions/configure-aws-credentials@v4
@@ -404,7 +416,7 @@ jobs:
       - name: Update deploy/envs/prod.yaml
         run: python3 .github/scripts/bump_digests.py deploy/envs/prod.yaml ${{ steps.digests.outputs.pairs }}
 
-      - name: Open or update the pull request
+      - name: Commit and push to main
         run: |
           if git diff --quiet -- deploy/envs/prod.yaml; then
             echo "Digests already current; nothing to deploy."
@@ -414,23 +426,24 @@ jobs:
           short="${GITHUB_SHA::7}"
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git checkout -B "$BRANCH"
           git add deploy/envs/prod.yaml
-          git commit -m "deploy: use images built from $short"
-          git push --force origin "$BRANCH"
+          git commit -m "deploy: production uses images built from $short" \
+                     -m "Approved on the production environment. Source commit: ${{ github.server_url }}/${{ github.repository }}/commit/$GITHUB_SHA" \
+                     -m "Roll back by reverting this commit."
 
-          body="Points production at the images published from \`$short\` (all five signed by this workflow and verified with cosign).
+          # main may have moved while this job waited for approval
+          git pull --rebase origin main
+          git push origin HEAD:main
 
-          Merging this PR deploys: Argo CD syncs \`deploy/\` from \`main\`.
-          Roll back by reverting the merge commit.
-
-          Source commit: ${{ github.server_url }}/${{ github.repository }}/commit/$GITHUB_SHA"
-
-          existing=$(gh pr list --head "$BRANCH" --state open --json number --jq '.[0].number // empty')
-          if [ -n "$existing" ]; then
-            gh pr edit "$existing" --title "Deploy images from $short" --body "$body"
-            echo "Updated PR #$existing"
-          else
-            gh pr create --head "$BRANCH" --base main \
-              --title "Deploy images from $short" --body "$body"
-          fi
+      - name: Summary
+        run: |
+          {
+            echo "### Promoted to production"
+            echo "Source commit: \`${GITHUB_SHA::7}\`"
+            echo
+            echo "| Service | Digest |"
+            echo "|---|---|"
+            for pair in ${{ steps.digests.outputs.pairs }}; do
+              echo "| ${pair%%=*} | \`${pair#*=}\` |"
+            done
+          } >> "$GITHUB_STEP_SUMMARY"
