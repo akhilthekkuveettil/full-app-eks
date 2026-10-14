@@ -19,8 +19,8 @@ For what the infrastructure is, see [INFRASTRUCTURE.md](INFRASTRUCTURE.md).
 2. **Merge to `main`.** CI runs again. If the push touched `infra/` and the Terraform plan has
    changes, a person approves the apply first; otherwise Terraform is skipped. Then the Release stage
    (`publish-image`) pushes signed images to ECR.
-3. **The Deploy stage waits for approval.** The `Deploy · approval (production)` job pauses on the
-   `production` environment until a required reviewer approves it in the Actions run.
+3. **The Deploy stage waits for approval.** The `Deploy · approval (production-infra)` job pauses on the
+   `production-infra` environment until a required reviewer approves it in the Actions run.
 4. **After approval, CI commits to `main` directly** (`Deploy · commit digests to main`). It verifies
    the cosign signatures of the images just published and points `deploy/envs/prod.yaml` at their
    digests. Argo CD syncs `deploy/` from `main` to the cluster. There is no pull request.
@@ -39,7 +39,7 @@ the older run.
 | 3 Infra | `Infra · terraform plan` | only when `infra/` changed | `terraform fmt -check`, `init`, `validate`, `plan` against production with the read-only role `app-github-terraform-plan`; the plan is written to the job summary. On `main`, a plan with changes is kept as an artifact for the apply job |
 | 3 Infra | `Infra · terraform apply (needs approval)` | pushes to `main` when `infra/` changed and the plan has changes | Runs in the `production-infra` environment (required reviewers), assumes `app-github-terraform-apply`, and applies exactly the saved plan. Skipped when there is nothing to change |
 | 4 Release | `Release · publish backend1` ... `Release · publish frontend` | pushes to `main`, after tests, scans and the Infra stage succeed (a skipped Terraform job counts as success) | Assume the AWS role through OIDC; build; Trivy scan (fails on fixable HIGH/CRITICAL); push `app/<service>:<git sha>`; sign the image digest with cosign (keyless, skipped if that digest is already signed); write the digest to the job summary |
-| 5 Deploy | `Deploy · approval (production)` | pushes to `main`, after Release | Empty job on the `production` environment; the run pauses here until a required reviewer approves it |
+| 5 Deploy | `Deploy · approval (production-infra)` | pushes to `main`, after Release | Empty job on the `production-infra` environment (the same one that gates Terraform applies); the run pauses here until a required reviewer approves it |
 | 5 Deploy | `Deploy · commit digests to main` | after approval | Look up the digest of each image tagged with the commit SHA; `cosign verify` that this workflow signed it; rewrite the digests in `deploy/envs/prod.yaml` (`.github/scripts/bump_digests.py`); rebase on `main` and push the commit directly to `main` |
 
 Job ids in the workflow file: `detect-changes`, `test-backend`, `test-frontend`, `terraform-plan`,
@@ -80,7 +80,7 @@ The deployment is described by `deploy/envs/prod.yaml`; Argo CD applies whatever
 ### Release a new build
 
 Normally there is nothing to do except approve the deployment in the Actions run (Review
-deployments, tick `production`, Approve). The manual equivalent, for example when CI is
+deployments, tick `production-infra`, Approve). The manual equivalent, for example when CI is
 unavailable:
 
 ```bash
@@ -124,10 +124,9 @@ infrastructure step always runs before images are published and deployed.
 
 1. Create the two CI roles by applying Terraform locally once (they cannot create themselves):
    `cd infra/terraform/prod && terraform init -reconfigure && terraform apply`.
-2. GitHub: Settings -> Environments -> create two environments, each with required reviewers
-   and "Deployment branches" restricted to `main`:
-   * `production-infra` approves Terraform applies,
-   * `production` approves deployments of new images.
+2. GitHub: Settings -> Environments -> `production-infra`: add required reviewers and restrict
+   "Deployment branches" to `main`. This one environment approves both Terraform applies and
+   deployments of new images.
 3. GitHub: Settings -> Secrets and variables -> Actions -> New repository secret
    `TF_API_ALLOWED_CIDRS` with a JSON list, e.g. `["203.0.113.7/32"]` (the CIDRs allowed to reach
    the Kubernetes API; the value that is in your local `terraform.tfvars`).

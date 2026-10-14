@@ -352,18 +352,18 @@ jobs:
           echo "${{ matrix.service }}: ${{ steps.ecr.outputs.registry }}/app/${{ matrix.service }}@${{ steps.push.outputs.digest }}" >> "$GITHUB_STEP_SUMMARY"
 
   # ──────────────────────────────── 5. Deploy ──────────────────────────────
-  # A person approves on the "production" environment (required reviewers); then the digests of
+  # A person approves on the "production-infra" environment (required reviewers); then the digests of
   # the images just published are committed to deploy/envs/prod.yaml on main and Argo CD syncs.
   # Roll back by reverting that commit.
   #
   # The approval is a separate, empty job on purpose: a job that uses an environment gets an
   # environment-based OIDC subject, and the AWS role trusts only the main-branch subject.
   approve-production:
-    name: "Deploy · approval (production)"
+    name: "Deploy · approval (production-infra)"
     needs: publish-image
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
-    environment: production
+    environment: production-infra
     steps:
       - name: Approved
         run: echo "Deployment of ${GITHUB_SHA::7} to production approved."
