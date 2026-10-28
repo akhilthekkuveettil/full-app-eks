@@ -30,26 +30,12 @@
 </svg>
 
 <div class="backdrop" aria-hidden="true">
-  <div class="grid-lines"></div>
+  <div class="glow"></div>
   <svg class="watermark" viewBox="0 0 100 100"><use href="#k8s-wheel" /></svg>
-  <svg class="cluster" viewBox="0 0 600 200" preserveAspectRatio="xMidYMax meet">
-    <g class="links">
-      <path d="M300 30 L120 120 M300 30 L300 120 M300 30 L480 120" />
-      <path d="M120 120 L60 180 M120 120 L180 180 M300 120 L260 180 M300 120 L340 180 M480 120 L420 180 M480 120 L540 180" />
-    </g>
-    <g class="nodes">
-      <circle cx="300" cy="30" r="9" class="control" />
-      <circle cx="120" cy="120" r="7" />
-      <circle cx="300" cy="120" r="7" />
-      <circle cx="480" cy="120" r="7" />
-      <circle cx="60" cy="180" r="4" />
-      <circle cx="180" cy="180" r="4" />
-      <circle cx="260" cy="180" r="4" />
-      <circle cx="340" cy="180" r="4" />
-      <circle cx="420" cy="180" r="4" />
-      <circle cx="540" cy="180" r="4" />
-    </g>
-  </svg>
+  <div class="stage"><div class="floor"></div></div>
+  <span class="cube c1"><i></i><i></i><i></i><i></i><i></i><i></i></span>
+  <span class="cube c2"><i></i><i></i><i></i><i></i><i></i><i></i></span>
+  <span class="cube c3"><i></i><i></i><i></i><i></i><i></i><i></i></span>
 </div>
 
 <main>
@@ -65,13 +51,86 @@
     </p>
   </header>
 
+  <section class="stats" aria-label="Summary">
+    <div class="tile">
+      <svg class="donut" viewBox="0 0 36 36" aria-hidden="true">
+        <circle class="track" cx="18" cy="18" r="15.9155" />
+        <circle class="value" cx="18" cy="18" r="15.9155" [attr.stroke-dasharray]="healthyPercent() + ' 100'" />
+      </svg>
+      <div>
+        <p class="tile-label">Healthy</p>
+        <p class="tile-value">{{ liveCount() }}<small>/ {{ backends().length }}</small></p>
+      </div>
+    </div>
+    <div class="tile">
+      <svg class="tile-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M13 2 4 14h7l-1 8 9-12h-7z" /></svg>
+      <div>
+        <p class="tile-label">Avg response</p>
+        <p class="tile-value">{{ averageMs() ?? '-' }}<small>ms</small></p>
+      </div>
+    </div>
+    <div class="tile">
+      <svg class="tile-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 17l6-6 4 4 8-9M15 6h6v6" /></svg>
+      <div>
+        <p class="tile-label">Uptime &middot; {{ checks() }} checks</p>
+        <p class="tile-value">{{ uptimePercent() ?? '-' }}<small>%</small></p>
+      </div>
+    </div>
+  </section>
+
   <section class="grid" aria-label="Backend services">
-    @for (b of backends(); track b.name) {
-      <section class="card" [class.live]="b.live === true" [class.off]="b.live === false">
+    @for (b of backends(); track b.name; let i = $index) {
+      @let c = charts()[i];
+      <section
+        class="card"
+        [class.live]="b.live === true"
+        [class.off]="b.live === false"
+        [style.--c]="c.color"
+        (pointermove)="tilt($event)"
+        (pointerleave)="untilt($event)"
+      >
         <span class="dot"></span>
         <span class="msg">{{ b.message }}</span>
+        <svg class="spark" [attr.viewBox]="'0 0 ' + spark.w + ' ' + spark.h" preserveAspectRatio="none" aria-hidden="true">
+          <path class="spark-area" [attr.d]="c.spark.area" />
+          <path class="spark-line" [attr.d]="c.spark.line" />
+        </svg>
+        <svg class="ticks" [attr.viewBox]="'0 0 ' + maxSamples * 4 + ' 8'" preserveAspectRatio="none" aria-hidden="true">
+          @for (up of c.ticks; track $index) {
+            <rect
+              [attr.x]="(maxSamples - c.ticks.length + $index) * 4"
+              y="0"
+              width="3"
+              height="8"
+              rx="1"
+              [class.down]="!up"
+            />
+          }
+        </svg>
       </section>
     }
+  </section>
+
+  <section class="panel">
+    <div class="panel-head">
+      <h2>Response time</h2>
+      <ul class="legend">
+        @for (c of charts(); track c.name) {
+          <li [style.--c]="c.color">{{ c.name }}</li>
+        }
+      </ul>
+      <span class="hint">peak {{ maxMs() }} ms</span>
+    </div>
+    <svg class="chart" [attr.viewBox]="'0 0 ' + chart.w + ' ' + chart.h" preserveAspectRatio="none" role="img" aria-label="Response time of each backend">
+      <g class="gridlines">
+        <line x1="0" [attr.x2]="chart.w" [attr.y1]="chart.h * 0.25" [attr.y2]="chart.h * 0.25" />
+        <line x1="0" [attr.x2]="chart.w" [attr.y1]="chart.h * 0.5" [attr.y2]="chart.h * 0.5" />
+        <line x1="0" [attr.x2]="chart.w" [attr.y1]="chart.h * 0.75" [attr.y2]="chart.h * 0.75" />
+      </g>
+      @for (c of charts(); track c.name) {
+        <path class="line" [attr.d]="c.chart.line" [attr.stroke]="c.color" />
+      }
+    </svg>
   </section>
 
   <section class="panel">
