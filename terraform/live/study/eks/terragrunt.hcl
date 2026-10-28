@@ -20,4 +20,7 @@ inputs = {
 
   # public API endpoint is open to everyone for the study; set ["<your ip>/32"] to restrict
   public_access_cidrs = ["0.0.0.0/0"]
+
+  # kubectl from the laptop; the CI role is admin already because it created the cluster
+  admin_principal_arns = ["arn:aws:iam::065148239770:user/admin"]
 }

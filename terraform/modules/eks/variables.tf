@@ -19,6 +19,12 @@ variable "public_access_cidrs" {
   default     = ["0.0.0.0/0"]
 }
 
+variable "admin_principal_arns" {
+  description = "IAM users or roles that get cluster-admin through EKS access entries (the creator, the CI role, is admin already)"
+  type        = list(string)
+  default     = []
+}
+
 variable "node_instance_type" {
   type    = string
   default = "t3.small"
