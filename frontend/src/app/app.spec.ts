@@ -58,4 +58,20 @@ describe('App', () => {
     expect(row.textContent).toContain('backend2');
     expect(row.textContent).toContain('live');
   });
+
+  it('switches between the light and dark theme', async () => {
+    const fixture = TestBed.createComponent(App);
+    fixture.detectChanges();
+    const host = fixture.nativeElement as HTMLElement;
+    const toggle = host.querySelector('.theme-toggle') as HTMLButtonElement;
+
+    expect(host.getAttribute('data-theme')).toBe('light');
+    expect(toggle.getAttribute('aria-checked')).toBe('false');
+
+    toggle.click();
+    fixture.detectChanges();
+    expect(host.getAttribute('data-theme')).toBe('dark');
+    expect(toggle.getAttribute('aria-checked')).toBe('true');
+    expect(document.documentElement.dataset['theme']).toBe('dark');
+  });
 });

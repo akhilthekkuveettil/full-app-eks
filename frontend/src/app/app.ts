@@ -1,4 +1,4 @@
-import { Component, OnDestroy, OnInit, computed, inject, signal } from '@angular/core';
+import { Component, OnDestroy, OnInit, computed, effect, inject, signal } from '@angular/core';
 import { DatePipe } from '@angular/common';
 import { HttpClient } from '@angular/common/http';
 import { firstValueFrom, timeout } from 'rxjs';
@@ -20,6 +20,18 @@ interface HistoryRow {
 interface Sample {
   live: boolean;
   ms: number;
+}
+
+type Theme = 'light' | 'dark';
+const THEME_KEY = 'theme';
+
+// the saved choice, else light; storage can be blocked, so every access is guarded
+function initialTheme(): Theme {
+  try {
+    return localStorage.getItem(THEME_KEY) === 'dark' ? 'dark' : 'light';
+  } catch {
+    return 'light';
+  }
 }
 
 const BACKENDS = ['backend1', 'backend2', 'backend3', 'backend4'];
@@ -60,6 +72,7 @@ function plot(samples: Sample[], w: number, h: number, max: number) {
   imports: [DatePipe],
   templateUrl: './app.html',
   styleUrl: './app.css',
+  host: { '[attr.data-theme]': 'theme()' },
 })
 export class App implements OnInit, OnDestroy {
   private readonly http = inject(HttpClient);
@@ -70,6 +83,24 @@ export class App implements OnInit, OnDestroy {
   );
 
   protected readonly history = signal<HistoryRow[]>([]);
+
+  protected readonly theme = signal<Theme>(initialTheme());
+
+  constructor() {
+    // page background and browser chrome follow the theme too, not just the component
+    effect(() => {
+      const theme = this.theme();
+      document.documentElement.dataset['theme'] = theme;
+      document
+        .querySelector('meta[name="theme-color"]')
+        ?.setAttribute('content', theme === 'dark' ? '#0a1020' : '#f4f7fd');
+      try {
+        localStorage.setItem(THEME_KEY, theme);
+      } catch {
+        // private mode: the choice just is not remembered
+      }
+    });
+  }
 
   // the last MAX_SAMPLES checks of each backend, kept in the browser for the graphs
   private readonly series = signal<Record<string, Sample[]>>({});
@@ -125,6 +156,10 @@ export class App implements OnInit, OnDestroy {
 
   ngOnDestroy() {
     clearInterval(this.timer);
+  }
+
+  protected toggleTheme() {
+    this.theme.update((t) => (t === 'dark' ? 'light' : 'dark'));
   }
 
   // cards lean towards the pointer
