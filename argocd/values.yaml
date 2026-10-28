@@ -6,6 +6,14 @@
 configs:
   params:
     server.insecure: true
+  cm:
+    # local account for developers; an admin sets its password once (argocd account update-password)
+    accounts.developer: login
+  rbac:
+    # nobody gets anything by default; the developer account is read-only
+    policy.default: ""
+    policy.csv: |
+      g, developer, role:readonly
 
 server:
   ingress:

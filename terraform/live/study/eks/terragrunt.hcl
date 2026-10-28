@@ -23,4 +23,7 @@ inputs = {
 
   # kubectl from the laptop; the CI role is admin already because it created the cluster
   admin_principal_arns = ["arn:aws:iam::065148239770:user/admin"]
+
+  # developers: read-only on the whole cluster
+  viewer_principal_arns = ["arn:aws:iam::065148239770:user/dev-viewer"]
 }

@@ -25,6 +25,12 @@ variable "admin_principal_arns" {
   default     = []
 }
 
+variable "viewer_principal_arns" {
+  description = "IAM users or roles that get read-only access to the whole cluster (no Secrets) through EKS access entries"
+  type        = list(string)
+  default     = []
+}
+
 variable "node_instance_type" {
   type    = string
   default = "t3.small"
