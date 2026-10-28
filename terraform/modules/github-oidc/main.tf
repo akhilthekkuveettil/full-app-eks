@@ -1,7 +1,7 @@
 # Lets GitHub Actions log in to AWS without stored keys. Three roles, each trusted for one kind of workflow run:
 #   plan    pull requests            read-only, so a plan can never change anything
 #   images  pushes to the branch     push images to ECR only
-#   infra   the approved environment administrator, used by terragrunt apply (it creates IAM roles, EKS, RDS ...)
+#   infra   administrator for terragrunt apply (it creates IAM roles, EKS, RDS ...); the workflow only uses it on a manual run
 data "aws_caller_identity" "current" {}
 
 data "aws_region" "current" {}
@@ -24,7 +24,7 @@ locals {
   roles = {
     plan   = { subject = "pull_request", policy_arn = "arn:aws:iam::aws:policy/ReadOnlyAccess" }
     images = { subject = "ref:refs/heads/${var.branch}", policy_arn = null }
-    infra  = { subject = "environment:${var.environment}", policy_arn = "arn:aws:iam::aws:policy/AdministratorAccess" }
+    infra  = { subject = "ref:refs/heads/${var.branch}", policy_arn = "arn:aws:iam::aws:policy/AdministratorAccess" }
   }
 }
 

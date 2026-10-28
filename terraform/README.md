@@ -22,17 +22,15 @@ Order (terragrunt works it out): vpc, ecr -> eks -> rds, alb-controller.
 Everything below can run from GitHub instead of your laptop (`.github/workflows/`):
 
 * `deploy.yml`, one pipeline in order: infrastructure, then the application. A pull request runs `plan` (read-only role)
-  and the backend tests. A push to `master` runs `apply` after a reviewer approves the `production` environment
-  (it also installs Argo CD and the `Application`), then builds and pushes all images tagged with the commit, and commits
-  the tag into `kubernetes/kustomization.yaml`. Argo CD rolls it out. Only the parts whose files changed run.
+  and the backend tests. A push to `master` runs the tests, builds and pushes all images tagged with the commit, and commits
+  the tag into `kubernetes/kustomization.yaml`; Argo CD rolls it out. Infrastructure is applied only from "Run workflow"
+  (Actions tab): that run applies Terraform, installs Argo CD and the `Application`, then does the app steps.
 
 One-time setup, by hand (GitHub Actions cannot create its own login):
 
 ```bash
 cd terraform/live/bootstrap/github-oidc && terragrunt apply     # OIDC provider + roles app-github-{plan,images,infra}
 ```
-
-Then in GitHub: Settings > Environments > New environment `production` > Required reviewers (you).
 
 ## 0. Tools
 

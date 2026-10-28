@@ -9,7 +9,7 @@ metadata:
 spec:
   project: default
   source:
-    repoURL: https://github.com/akhilthekkuveettil/full-app-eks.git
+    repoURL: git@github.com:akhilthekkuveettil/full-app-eks.git
     targetRevision: master
     path: kubernetes
   destination:

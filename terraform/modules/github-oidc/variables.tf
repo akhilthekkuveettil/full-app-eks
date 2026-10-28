@@ -19,15 +19,9 @@ variable "github_repo_id" {
 }
 
 variable "branch" {
-  description = "Branch whose workflows may push images"
+  description = "Branch whose workflows may push images and apply infrastructure"
   type        = string
   default     = "master"
-}
-
-variable "environment" {
-  description = "GitHub environment (with required reviewers) whose jobs may change infrastructure"
-  type        = string
-  default     = "production"
 }
 
 variable "ecr_repository_prefix" {

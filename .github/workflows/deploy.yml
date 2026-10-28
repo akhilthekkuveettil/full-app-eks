@@ -1,11 +1,11 @@
 # One pipeline, in order: infrastructure first, then the application.
 #   pull request  plan (read-only role) + backend tests
-#   push to master  infra apply (after a reviewer approves the "production" environment)
-#                   -> build and push images -> write the new tag into kubernetes/kustomization.yaml
+#   push to master  test -> build and push images -> write the new tag into kubernetes/kustomization.yaml
 #                   -> Argo CD rolls the new images out
-# Only the parts whose files changed run: infra when terraform/ changed, the app when a service folder or this file changed.
-# "Run workflow" (workflow_dispatch) runs everything, including infra; use it after editing argocd/.
-# The approval is the GitHub environment "production" (Settings > Environments > required reviewers).
+#   Run workflow    infra apply first (the click is the approval; environments cannot require reviewers on a
+#                   private repo on the Free plan), then the same app steps
+# Infra applies only from "Run workflow" (workflow_dispatch), which runs everything; use it after editing terraform/ or argocd/.
+# The app steps run on a push when a service folder or this file changed.
 name: deploy
 
 on:
@@ -100,9 +100,8 @@ jobs:
 
   infra:
     needs: changes
-    if: github.event_name != 'pull_request' && needs.changes.outputs.infra == 'true'
+    if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
-    environment: production
     steps:
       - uses: actions/checkout@v4
       - uses: hashicorp/setup-terraform@v3
