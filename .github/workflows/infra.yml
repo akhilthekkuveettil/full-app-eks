@@ -66,6 +66,10 @@ jobs:
           curl -fsSLO "$base/terragrunt_linux_amd64"
           curl -fsSL "$base/SHA256SUMS" | grep ' terragrunt_linux_amd64$' | sha256sum -c -
           sudo install -m 0755 terragrunt_linux_amd64 /usr/local/bin/terragrunt
+      - name: DEBUG show OIDC claims (remove after the login works)
+        run: |
+          curl -sH "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" "$ACTIONS_ID_TOKEN_REQUEST_URL&audience=sts.amazonaws.com" |
+            python3 -I -c 'import sys,json,base64; t=json.load(sys.stdin)["value"].split(".")[1]; c=json.loads(base64.urlsafe_b64decode(t+"="*(-len(t)%4))); print({k:c.get(k) for k in ("sub","aud","repository","environment","ref","job_workflow_ref")})'
       - uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: arn:aws:iam::${{ env.ACCOUNT_ID }}:role/app-github-infra
