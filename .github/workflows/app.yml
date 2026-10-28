@@ -39,7 +39,8 @@ jobs:
           # so the unhashed dev tools go in a second install
           pip install --require-hashes -r requirements.txt
           pip install -r requirements-dev.txt
-          pytest -q
+          # python -m puts the service folder on sys.path, which "from app import main" needs
+          python -m pytest -q
 
   build:
     needs: test
