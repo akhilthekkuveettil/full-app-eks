@@ -154,7 +154,7 @@ metadata:
   name: backend4
   namespace: app
 spec:
-  replicas: 1
+  replicas: 0
   selector:
     matchLabels:
       app: backend4
