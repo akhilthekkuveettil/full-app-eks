@@ -18,10 +18,19 @@ resource "aws_iam_role_policy_attachment" "cluster" {
   policy_arn = "arn:aws:iam::aws:policy/AmazonEKSClusterPolicy"
 }
 
+# created first so the retention applies; without it EKS creates the group with no expiry
+resource "aws_cloudwatch_log_group" "cluster" {
+  name              = "/aws/eks/${var.cluster_name}/cluster"
+  retention_in_days = var.log_retention_days
+}
+
 resource "aws_eks_cluster" "this" {
   name     = var.cluster_name
   role_arn = aws_iam_role.cluster.arn
   version  = var.kubernetes_version
+
+  # only the logs that matter for security; api server, scheduler and controller-manager logs cost more
+  enabled_cluster_log_types = ["audit", "authenticator"]
 
   vpc_config {
     subnet_ids              = var.subnet_ids
@@ -36,7 +45,10 @@ resource "aws_eks_cluster" "this" {
     bootstrap_cluster_creator_admin_permissions = true
   }
 
-  depends_on = [aws_iam_role_policy_attachment.cluster]
+  depends_on = [
+    aws_iam_role_policy_attachment.cluster,
+    aws_cloudwatch_log_group.cluster,
+  ]
 }
 
 # ---- worker nodes ----
@@ -67,13 +79,38 @@ resource "aws_iam_role_policy_attachment" "node" {
   policy_arn = "arn:aws:iam::aws:policy/${each.value}"
 }
 
+# IMDSv2 only, and hop limit 1 so pods cannot read the node's IAM credentials
+# (pods use IRSA; hostNetwork pods such as aws-node still reach the metadata service)
+resource "aws_launch_template" "node" {
+  name_prefix = "${var.cluster_name}-node-"
+
+  metadata_options {
+    http_endpoint               = "enabled"
+    http_tokens                 = "required"
+    http_put_response_hop_limit = 1
+  }
+
+  block_device_mappings {
+    device_name = "/dev/xvda"
+    ebs {
+      volume_size = var.node_disk_size
+      volume_type = "gp3"
+      encrypted   = true
+    }
+  }
+}
+
 resource "aws_eks_node_group" "this" {
   cluster_name    = aws_eks_cluster.this.name
   node_group_name = "workers"
   node_role_arn   = aws_iam_role.node.arn
   subnet_ids      = var.subnet_ids
   instance_types  = [var.node_instance_type]
-  disk_size       = var.node_disk_size
+
+  launch_template {
+    id      = aws_launch_template.node.id
+    version = aws_launch_template.node.latest_version
+  }
 
   scaling_config {
     desired_size = var.node_count

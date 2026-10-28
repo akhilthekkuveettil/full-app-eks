@@ -29,6 +29,12 @@ variable "node_count" {
   default = 2
 }
 
+variable "log_retention_days" {
+  description = "Days to keep the control plane logs in CloudWatch"
+  type        = number
+  default     = 7
+}
+
 variable "node_disk_size" {
   description = "Node root volume size in GiB"
   type        = number

@@ -10,7 +10,7 @@ spec:
   project: default
   source:
     repoURL: https://github.com/akhilthekkuveettil/full-app-eks.git
-    targetRevision: chore/teardown-toggle
+    targetRevision: master
     path: kubernetes
   destination:
     server: https://kubernetes.default.svc
