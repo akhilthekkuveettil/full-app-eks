@@ -17,6 +17,23 @@ terraform/
 
 Order (terragrunt works it out): vpc, ecr -> eks -> rds, alb-controller.
 
+## CI/CD (GitHub Actions)
+
+Everything below can run from GitHub instead of your laptop (`.github/workflows/`):
+
+* `infra.yml`: pull request touching `terraform/` or `argocd/` runs `plan` (read-only role). Push to `master` runs `apply`
+  after a reviewer approves the `production` environment, then installs Argo CD and the `Application`.
+* `app.yml`: push touching a service folder runs backend tests, builds and pushes all images tagged with the commit,
+  and commits the tag into `kubernetes/kustomization.yaml`. Argo CD rolls it out.
+
+One-time setup, by hand (GitHub Actions cannot create its own login):
+
+```bash
+cd terraform/live/bootstrap/github-oidc && terragrunt apply     # OIDC provider + roles app-github-{plan,images,infra}
+```
+
+Then in GitHub: Settings > Environments > New environment `production` > Required reviewers (you).
+
 ## 0. Tools
 
 `aws` (logged in), `terraform` >= 1.10, `terragrunt`, `docker`, `kubectl`, `helm` (Terraform runs the chart, helm itself is optional).

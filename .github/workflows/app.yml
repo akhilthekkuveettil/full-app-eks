@@ -1,0 +1,77 @@
+# Application: test the backends, build and push all images tagged with the commit, then write the tag into
+# kubernetes/kustomization.yaml. Argo CD sees that commit and rolls the new images out.
+name: app
+
+on:
+  push:
+    branches: [master]
+    paths: [backend1/**, backend2/**, backend3/**, backend4/**, frontend/**, .github/workflows/app.yml]
+  workflow_dispatch:
+
+permissions:
+  id-token: write
+  contents: write
+
+concurrency:
+  group: app
+  cancel-in-progress: false
+
+env:
+  AWS_REGION: us-east-1
+  ACCOUNT_ID: "065148239770"
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: true
+      matrix:
+        service: [backend1, backend2, backend3, backend4]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: pytest
+        working-directory: ${{ matrix.service }}
+        run: |
+          pip install -r requirements.txt -r requirements-dev.txt
+          pytest -q
+
+  build:
+    needs: test
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: true
+      matrix:
+        service: [backend1, backend2, backend3, backend4, frontend]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::${{ env.ACCOUNT_ID }}:role/app-github-images
+          aws-region: ${{ env.AWS_REGION }}
+      - uses: aws-actions/amazon-ecr-login@v2
+      - name: Build and push
+        run: |
+          image=$ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/app/${{ matrix.service }}:${GITHUB_SHA::7}
+          docker build -t "$image" ./${{ matrix.service }}
+          docker push "$image"
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Write the new tag into kustomization.yaml
+        run: |
+          tag=${GITHUB_SHA::7}
+          for s in backend1 backend2 backend3 backend4 frontend; do
+            sed -i "/- name: $s\$/,/newTag:/ s/newTag: .*/newTag: $tag/" kubernetes/kustomization.yaml
+          done
+          git diff --stat
+      - name: Commit
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git diff --quiet || { git commit -am "chore: deploy images ${GITHUB_SHA::7}" && git pull --rebase && git push; }

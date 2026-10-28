@@ -1,0 +1,97 @@
+# Infrastructure: plan on pull requests, apply on master after a manual approval.
+# The approval is the GitHub environment "production" (Settings > Environments > required reviewers).
+# After the apply the same job installs Argo CD and hands the app over to it.
+name: infra
+
+on:
+  pull_request:
+    paths: [terraform/**, argocd/**, .github/workflows/infra.yml]
+  push:
+    branches: [master]
+    paths: [terraform/**, argocd/**, .github/workflows/infra.yml]
+  workflow_dispatch:
+
+permissions:
+  id-token: write
+  contents: read
+
+concurrency:
+  group: infra
+  cancel-in-progress: false
+
+env:
+  AWS_REGION: us-east-1
+  ACCOUNT_ID: "065148239770"
+  CLUSTER: app-study
+  TERRAGRUNT_VERSION: v1.2.1
+  ARGOCD_CHART_VERSION: 10.11.6
+
+jobs:
+  plan:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.16.7
+          terraform_wrapper: false
+      - name: Install terragrunt
+        run: |
+          base=https://github.com/gruntwork-io/terragrunt/releases/download/$TERRAGRUNT_VERSION
+          curl -fsSLO "$base/terragrunt_linux_amd64"
+          curl -fsSL "$base/SHA256SUMS" | grep ' terragrunt_linux_amd64$' | sha256sum -c -
+          sudo install -m 0755 terragrunt_linux_amd64 /usr/local/bin/terragrunt
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::${{ env.ACCOUNT_ID }}:role/app-github-plan
+          aws-region: ${{ env.AWS_REGION }}
+      - name: Plan (read-only role, no state lock)
+        working-directory: terraform/live/study
+        run: terragrunt run --all plan --non-interactive -- -lock=false
+
+  apply:
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.16.7
+          terraform_wrapper: false
+      - name: Install terragrunt
+        run: |
+          base=https://github.com/gruntwork-io/terragrunt/releases/download/$TERRAGRUNT_VERSION
+          curl -fsSLO "$base/terragrunt_linux_amd64"
+          curl -fsSL "$base/SHA256SUMS" | grep ' terragrunt_linux_amd64$' | sha256sum -c -
+          sudo install -m 0755 terragrunt_linux_amd64 /usr/local/bin/terragrunt
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::${{ env.ACCOUNT_ID }}:role/app-github-infra
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Apply infrastructure
+        working-directory: terraform/live/study
+        run: terragrunt run --all --non-interactive --backend-bootstrap apply
+
+      - name: Connect kubectl
+        run: |
+          aws eks update-kubeconfig --region "$AWS_REGION" --name "$CLUSTER"
+          kubectl wait --for=condition=Ready nodes --all --timeout=300s
+          kubectl -n kube-system rollout status deploy/aws-load-balancer-controller --timeout=300s
+
+      - name: Database secret
+        run: |
+          DATABASE_URL=$(cd terraform/live/study/rds && terragrunt output -raw database_url)
+          echo "::add-mask::$DATABASE_URL"
+          kubectl apply -f kubernetes/namespace.yaml
+          kubectl create secret generic database -n app --from-literal=DATABASE_URL="$DATABASE_URL" \
+            --dry-run=client -o yaml | kubectl apply -f -
+
+      - name: Argo CD
+        run: |
+          helm repo add argo https://argoproj.github.io/argo-helm
+          helm upgrade --install argocd argo/argo-cd --version "$ARGOCD_CHART_VERSION" \
+            -n argocd --create-namespace -f argocd/values.yaml --wait --timeout 10m
+          kubectl apply -f argocd/application.yaml
