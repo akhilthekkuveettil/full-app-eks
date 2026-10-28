@@ -3,7 +3,8 @@
 #   push to master  infra apply (after a reviewer approves the "production" environment)
 #                   -> build and push images -> write the new tag into kubernetes/kustomization.yaml
 #                   -> Argo CD rolls the new images out
-# Only the parts whose files changed run; "Run workflow" (workflow_dispatch) runs everything.
+# Only the parts whose files changed run: infra when terraform/ changed, the app when a service folder or this file changed.
+# "Run workflow" (workflow_dispatch) runs everything, including infra; use it after editing argocd/.
 # The approval is the GitHub environment "production" (Settings > Environments > required reviewers).
 name: deploy
 
@@ -47,7 +48,7 @@ jobs:
           fi
           files=$(git diff --name-only "$BASE" "$GITHUB_SHA")
           echo "$files"
-          echo "infra=$(echo "$files" | grep -qE '^(terraform/|argocd/|\.github/workflows/deploy\.yml)' && echo true || echo false)" >> "$GITHUB_OUTPUT"
+          echo "infra=$(echo "$files" | grep -qE '^terraform/' && echo true || echo false)" >> "$GITHUB_OUTPUT"
           echo "app=$(echo "$files" | grep -qE '^(backend[1-4]/|frontend/|\.github/workflows/deploy\.yml)' && echo true || echo false)" >> "$GITHUB_OUTPUT"
 
   plan:
