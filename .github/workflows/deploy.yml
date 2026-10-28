@@ -173,6 +173,8 @@ jobs:
 
   release:
     needs: build
+    # always(): a skipped job anywhere up the chain (infra) would otherwise skip this one too
+    if: always() && needs.build.result == 'success'
     runs-on: ubuntu-latest
     permissions:
       contents: write
