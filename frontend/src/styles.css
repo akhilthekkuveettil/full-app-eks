@@ -1,8 +1,8 @@
 /* Global styles; component styles live in app.css */
 html, body {
   margin: 0;
-  background: #0a1020;
-  color-scheme: dark;
+  background: #f4f7fd;
+  color-scheme: light;
 }
 
 *, *::before, *::after {
