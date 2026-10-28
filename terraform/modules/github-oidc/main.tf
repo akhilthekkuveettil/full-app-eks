@@ -12,6 +12,15 @@ resource "aws_iam_openid_connect_provider" "github" {
 }
 
 locals {
+  owner = split("/", var.github_repo)[0]
+  repo  = split("/", var.github_repo)[1]
+
+  # GitHub now sends the ids inside the subject; the plain form is kept in case a token still carries it
+  subject_prefixes = [
+    "repo:${local.owner}@${var.github_owner_id}/${local.repo}@${var.github_repo_id}",
+    "repo:${var.github_repo}",
+  ]
+
   roles = {
     plan   = { subject = "pull_request", policy_arn = "arn:aws:iam::aws:policy/ReadOnlyAccess" }
     images = { subject = "ref:refs/heads/${var.branch}", policy_arn = null }
@@ -36,7 +45,7 @@ data "aws_iam_policy_document" "assume" {
     condition {
       test     = "StringEquals"
       variable = "token.actions.githubusercontent.com:sub"
-      values   = ["repo:${var.github_repo}:${each.value.subject}"]
+      values   = [for p in local.subject_prefixes : "${p}:${each.value.subject}"]
     }
   }
 }

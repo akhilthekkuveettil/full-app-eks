@@ -8,6 +8,16 @@ variable "github_repo" {
   type        = string
 }
 
+variable "github_owner_id" {
+  description = "Numeric id of the GitHub owner; GitHub puts it in the token subject (repo:owner@id/name@id:...)"
+  type        = number
+}
+
+variable "github_repo_id" {
+  description = "Numeric id of the GitHub repository, from the same token subject"
+  type        = number
+}
+
 variable "branch" {
   description = "Branch whose workflows may push images"
   type        = string
