@@ -1,0 +1,22 @@
+# Helm values for Argo CD (chart argo/argo-cd 10.11.6, Argo CD v3.5.6).
+#   helm upgrade --install argocd argo/argo-cd --version 10.11.6 -n argocd --create-namespace -f argocd/values.yaml
+#
+# The ALB terminates HTTPS with the wildcard ACM certificate, so the Argo CD server itself speaks plain HTTP.
+# The Ingress joins ALB group "shared": every Ingress with the same group.name is served by ONE load balancer.
+configs:
+  params:
+    server.insecure: true
+
+server:
+  ingress:
+    enabled: true
+    ingressClassName: alb
+    hostname: argocd.aryanconcretespares.in
+    annotations:
+      alb.ingress.kubernetes.io/group.name: shared
+      alb.ingress.kubernetes.io/scheme: internet-facing
+      alb.ingress.kubernetes.io/target-type: ip
+      alb.ingress.kubernetes.io/healthcheck-path: /healthz
+      alb.ingress.kubernetes.io/listen-ports: '[{"HTTP": 80}, {"HTTPS": 443}]'
+      alb.ingress.kubernetes.io/certificate-arn: arn:aws:acm:us-east-1:065148239770:certificate/b7c41608-bb26-4e4c-aad2-39d15c05f920
+      alb.ingress.kubernetes.io/ssl-redirect: '443'

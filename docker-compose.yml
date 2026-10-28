@@ -1,0 +1,52 @@
+services:
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: appdb
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+  backend1:
+    build: ./backend1
+    environment:
+      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/appdb
+    ports:
+      - "8001:8000"
+    depends_on: [postgres]
+
+  backend2:
+    build: ./backend2
+    environment:
+      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/appdb
+    ports:
+      - "8002:8000"
+    depends_on: [postgres]
+
+  backend3:
+    build: ./backend3
+    environment:
+      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/appdb
+    ports:
+      - "8003:8000"
+    depends_on: [postgres]
+
+  backend4:
+    build: ./backend4
+    environment:
+      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/appdb
+    ports:
+      - "8004:8000"
+    depends_on: [postgres]
+
+  frontend:
+    build: ./frontend
+    ports:
+      - "4200:8080"
+    depends_on: [backend1, backend2, backend3, backend4]
+
+volumes:
+  pgdata:

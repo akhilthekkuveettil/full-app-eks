@@ -1,0 +1,10 @@
+/* Global styles; component styles live in app.css */
+html, body {
+  margin: 0;
+  background: #0a1020;
+  color-scheme: dark;
+}
+
+*, *::before, *::after {
+  box-sizing: border-box;
+}

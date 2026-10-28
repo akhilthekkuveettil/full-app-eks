@@ -1,0 +1,4 @@
+digests.env
+.oidc-token
+reports/
+*.key

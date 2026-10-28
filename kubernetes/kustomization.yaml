@@ -1,0 +1,27 @@
+# Image names hold the real account and region so Argo CD can render this folder as it is.
+# By hand: kubectl apply -k kubernetes   (Argo CD application: argocd/application.yaml)
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - namespace.yaml
+  - backends.yaml
+  - frontend.yaml
+  - ingress.yaml
+
+images:
+  - name: backend1
+    newName: 065148239770.dkr.ecr.us-east-1.amazonaws.com/app/backend1
+    newTag: v1
+  - name: backend2
+    newName: 065148239770.dkr.ecr.us-east-1.amazonaws.com/app/backend2
+    newTag: v1
+  - name: backend3
+    newName: 065148239770.dkr.ecr.us-east-1.amazonaws.com/app/backend3
+    newTag: v1
+  - name: backend4
+    newName: 065148239770.dkr.ecr.us-east-1.amazonaws.com/app/backend4
+    newTag: v1
+  - name: frontend
+    newName: 065148239770.dkr.ecr.us-east-1.amazonaws.com/app/frontend
+    newTag: v2

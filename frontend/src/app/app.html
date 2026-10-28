@@ -1,0 +1,102 @@
+<!-- Kubernetes mark: heptagon badge with a seven-spoke wheel. Drawn once, reused with <use>. -->
+<svg width="0" height="0" style="position: absolute" aria-hidden="true" focusable="false">
+  <defs>
+    <symbol id="k8s-wheel" viewBox="0 0 100 100">
+      <g fill="none" stroke="currentColor" stroke-width="5" stroke-linecap="round">
+        <circle cx="50" cy="50" r="17" />
+        <g>
+          <line x1="50" y1="33" x2="50" y2="14" />
+          <line x1="50" y1="33" x2="50" y2="14" transform="rotate(51.43 50 50)" />
+          <line x1="50" y1="33" x2="50" y2="14" transform="rotate(102.86 50 50)" />
+          <line x1="50" y1="33" x2="50" y2="14" transform="rotate(154.29 50 50)" />
+          <line x1="50" y1="33" x2="50" y2="14" transform="rotate(205.71 50 50)" />
+          <line x1="50" y1="33" x2="50" y2="14" transform="rotate(257.14 50 50)" />
+          <line x1="50" y1="33" x2="50" y2="14" transform="rotate(308.57 50 50)" />
+        </g>
+      </g>
+      <circle cx="50" cy="50" r="6" fill="currentColor" />
+    </symbol>
+    <symbol id="k8s-logo" viewBox="0 0 100 100">
+      <polygon
+        points="50,4 85.96,21.32 94.84,60.23 69.96,91.45 30.04,91.45 5.16,60.23 14.04,21.32"
+        fill="#326ce5"
+        stroke="#326ce5"
+        stroke-width="6"
+        stroke-linejoin="round"
+      />
+      <use href="#k8s-wheel" width="100" height="100" style="color: #fff" transform="translate(15 15) scale(0.7)" />
+    </symbol>
+  </defs>
+</svg>
+
+<div class="backdrop" aria-hidden="true">
+  <div class="grid-lines"></div>
+  <svg class="watermark" viewBox="0 0 100 100"><use href="#k8s-wheel" /></svg>
+  <svg class="cluster" viewBox="0 0 600 200" preserveAspectRatio="xMidYMax meet">
+    <g class="links">
+      <path d="M300 30 L120 120 M300 30 L300 120 M300 30 L480 120" />
+      <path d="M120 120 L60 180 M120 120 L180 180 M300 120 L260 180 M300 120 L340 180 M480 120 L420 180 M480 120 L540 180" />
+    </g>
+    <g class="nodes">
+      <circle cx="300" cy="30" r="9" class="control" />
+      <circle cx="120" cy="120" r="7" />
+      <circle cx="300" cy="120" r="7" />
+      <circle cx="480" cy="120" r="7" />
+      <circle cx="60" cy="180" r="4" />
+      <circle cx="180" cy="180" r="4" />
+      <circle cx="260" cy="180" r="4" />
+      <circle cx="340" cy="180" r="4" />
+      <circle cx="420" cy="180" r="4" />
+      <circle cx="540" cy="180" r="4" />
+    </g>
+  </svg>
+</div>
+
+<main>
+  <header class="hero">
+    <svg class="logo" viewBox="0 0 100 100" role="img" aria-label="Kubernetes"><use href="#k8s-logo" /></svg>
+    <div class="hero-text">
+      <p class="eyebrow">Amazon EKS &middot; namespace <code>app</code></p>
+      <h1>Service status</h1>
+    </div>
+    <p class="summary" [class.degraded]="liveCount() < backends().length" role="status">
+      <span class="pulse"></span>
+      {{ liveCount() }} of {{ backends().length }} services healthy
+    </p>
+  </header>
+
+  <section class="grid" aria-label="Backend services">
+    @for (b of backends(); track b.name) {
+      <section class="card" [class.live]="b.live === true" [class.off]="b.live === false">
+        <span class="dot"></span>
+        <span class="msg">{{ b.message }}</span>
+      </section>
+    }
+  </section>
+
+  <section class="panel">
+    <h2>Recent checks</h2>
+    @if (history().length === 0) {
+      <p class="hint">No history yet.</p>
+    } @else {
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr><th>Time</th><th>Service</th><th>Status</th></tr>
+          </thead>
+          <tbody>
+            @for (row of history(); track $index) {
+              <tr>
+                <td>{{ row.created_at | date: 'medium' }}</td>
+                <td>{{ row.service }}</td>
+                <td [class]="row.status === 'live' ? 'ok' : 'bad'">{{ row.status }}</td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      </div>
+    }
+  </section>
+
+  <p class="hint footer">Refreshes every 5 seconds &middot; running on Kubernetes</p>
+</main>

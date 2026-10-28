@@ -1,0 +1,30 @@
+# The AWS Load Balancer Controller (installed by terraform/modules/alb-controller) sees this
+# Ingress and creates an internet-facing ALB that sends traffic straight to the frontend pods.
+# HTTPS on k8application.aryanconcretespares.in with the wildcard ACM certificate (us-east-1);
+# plain HTTP on port 80 is redirected to HTTPS. DNS (a CNAME to the ALB) is managed at GoDaddy.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: frontend
+  namespace: app
+  annotations:
+    alb.ingress.kubernetes.io/group.name: shared
+    alb.ingress.kubernetes.io/scheme: internet-facing
+    alb.ingress.kubernetes.io/target-type: ip
+    alb.ingress.kubernetes.io/healthcheck-path: /
+    alb.ingress.kubernetes.io/listen-ports: '[{"HTTP": 80}, {"HTTPS": 443}]'
+    alb.ingress.kubernetes.io/certificate-arn: arn:aws:acm:us-east-1:065148239770:certificate/b7c41608-bb26-4e4c-aad2-39d15c05f920
+    alb.ingress.kubernetes.io/ssl-redirect: '443'
+spec:
+  ingressClassName: alb
+  rules:
+    - host: k8application.aryanconcretespares.in
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: frontend
+                port:
+                  number: 80

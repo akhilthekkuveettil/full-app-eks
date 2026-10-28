@@ -1,0 +1,6 @@
+{
+  "/api/backend1": { "target": "http://localhost:8001", "pathRewrite": { "^/api/backend1": "" } },
+  "/api/backend2": { "target": "http://localhost:8002", "pathRewrite": { "^/api/backend2": "" } },
+  "/api/backend3": { "target": "http://localhost:8003", "pathRewrite": { "^/api/backend3": "" } },
+  "/api/backend4": { "target": "http://localhost:8004", "pathRewrite": { "^/api/backend4": "" } }
+}

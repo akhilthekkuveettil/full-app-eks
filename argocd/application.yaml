@@ -1,0 +1,21 @@
+# Argo CD Application: keeps namespace "app" in sync with the kubernetes/ folder of this repo.
+#   kubectl apply -f argocd/application.yaml
+# The Secret "database" is not in git, so Argo CD neither creates nor prunes it (create it by hand).
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: app
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/akhilthekkuveettil/full-app-eks.git
+    targetRevision: chore/teardown-toggle
+    path: kubernetes
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: app
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
