@@ -35,7 +35,10 @@ jobs:
       - name: pytest
         working-directory: ${{ matrix.service }}
         run: |
-          pip install -r requirements.txt -r requirements-dev.txt
+          # requirements.txt carries hashes, which switches pip to hash mode for the whole command,
+          # so the unhashed dev tools go in a second install
+          pip install --require-hashes -r requirements.txt
+          pip install -r requirements-dev.txt
           pytest -q
 
   build:
