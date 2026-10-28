@@ -1,0 +1,291 @@
+# Deployment and security guide
+
+How the application is deployed to Amazon EKS, step by step, and which security measures are in place.
+
+Account `065148239770`, region `us-east-1`. Everything is deployed from GitHub Actions; the only commands run on a laptop are the one-time setup in Part A and the three cluster-side steps in Part B.
+
+## 1. What is deployed
+
+```
+                       GoDaddy DNS (CNAME records)
+        k8application.aryanconcretespares.in      argocd.aryanconcretespares.in
+                              \                    /
+                               v                  v
+                    ONE shared Application Load Balancer
+                    HTTPS 443 (wildcard ACM certificate), HTTP 80 redirects to 443
+                         |                              |
+          host k8application...                    host argocd...
+                         v                              v
+        frontend (nginx, Angular)                 argocd-server
+            | /api/backendN/...
+            v
+   backend1..backend4 (FastAPI) ----> RDS PostgreSQL 16 (private subnets)
+
+   EKS cluster app-study: 2 x t3.small nodes in private subnets, 2 AZs
+   Images: ECR repositories app/backend1..4 and app/frontend
+   GitOps: Argo CD reads this repo over SSH and keeps namespace "app" equal to kubernetes/
+```
+
+Both host names share one load balancer because their Ingress objects carry the same annotation `alb.ingress.kubernetes.io/group.name: shared`.
+
+| Part | Where it lives |
+|---|---|
+| AWS infrastructure (Terraform modules, run with Terragrunt) | `terraform/modules/*`, `terraform/live/study/*` |
+| GitHub-to-AWS login (OIDC provider and roles) | `terraform/modules/github-oidc`, `terraform/live/bootstrap/github-oidc` |
+| Application manifests | `kubernetes/` |
+| Argo CD configuration | `argocd/values.yaml`, `argocd/application.yaml` |
+| Pipeline | `.github/workflows/deploy.yml` |
+
+### Monthly cost
+
+Estimate for running 24/7 in `us-east-1`, from AWS list prices (730 hours per month). Prices change, so check them in the AWS pricing calculator before relying on the total.
+
+| Item | Basis | $ / month |
+|---|---|---|
+| EKS control plane | $0.10 per hour | 73 |
+| Two worker nodes | 2 x t3.small on-demand, $0.0208 per hour each | 30 |
+| Node disks | 2 x 20 GiB gp3 | 3 |
+| NAT gateway | $0.045 per hour, plus a little data | 34 |
+| Load balancer | one ALB, $0.0225 per hour plus about 1 LCU | 22 |
+| Public IPv4 addresses | about 3 (NAT and the ALB's two zones), $0.005 per hour each | 11 |
+| RDS PostgreSQL | db.t4g.micro single-AZ plus 20 GiB gp3 | 14 |
+| ECR, CloudWatch logs, S3 state, data transfer | small | 5 to 10 |
+| Route 53, ACM certificate | DNS is at GoDaddy, ACM is free | 0 |
+| **Total** | | **about 190 to 200** |
+
+That is about $0.26 per hour. The EKS control plane (38 percent) and the NAT gateway (18 percent) are the two largest items and cannot be removed without changing the design.
+
+Ways to spend less, with the trade-off:
+
+| Change | Saves | Trade-off |
+|---|---|---|
+| Replace the NAT gateway with a NAT instance (fck-nat, t4g.nano) | about $30 | One small instance is a single point of failure for outbound traffic |
+| Spot instances for the nodes | about $15 to 20 | Nodes can be reclaimed with two minutes' notice |
+| One node instead of two | about $15 | No spare capacity and no zone redundancy |
+| Destroy the stack when it is not needed (section 7) | nearly everything while it is down | Rebuild takes about 20 minutes and the database is lost unless backed up |
+
+Hardening in section 6.6 adds cost: Multi-AZ RDS about $14 more, a NAT gateway per zone about $33 more, each Secrets Manager secret $0.40, AWS WAF from about $5. Budgeted for those, a realistic ceiling is $250 per month.
+
+Set an AWS Budgets alert at about $200 per month, notifying at 80 and 100 percent. The first two budgets in an account are free.
+
+## 2. How a deployment flows
+
+```
+git push (frontend/ or backend*/)
+   -> test       backend pytest, 4 services in parallel
+   -> build      docker build + push 5 images to ECR, tagged with the commit (7 characters)
+   -> release    writes the tag into kubernetes/kustomization.yaml and commits it
+   -> Argo CD    sees the new commit within ~3 minutes, renders kubernetes/, rolls the pods
+
+Actions > deploy > Run workflow   (infrastructure changes)
+   -> infra      terragrunt apply (vpc, ecr, eks, rds, alb-controller), database secret, Argo CD install
+   -> then test, build, release as above
+```
+
+Pull requests run `plan` (read-only role) and the backend tests, and change nothing.
+
+## 3. Part A: one-time setup
+
+### A1. Prerequisites
+
+- AWS account `065148239770`, with an IAM user able to administer it, and the AWS CLI logged in.
+- Tools on the laptop: `aws`, `terraform` (1.10 or newer), `terragrunt`, `kubectl`, `helm`, `git`.
+- An ACM certificate for `*.aryanconcretespares.in` in `us-east-1` (its ARN is in `kubernetes/ingress.yaml` and `argocd/values.yaml`).
+- DNS for `aryanconcretespares.in` at GoDaddy.
+- A GitHub repository. Pushing needs the right SSH key (this laptop has two GitHub accounts):
+  ```bash
+  git config core.sshCommand "ssh -i ~/.ssh/id_ed25519_github2 -o IdentitiesOnly=yes"
+  git push origin master
+  ```
+
+### A2. Create the GitHub-to-AWS login (once)
+
+GitHub Actions cannot create the thing it logs in with, so this step runs by hand:
+
+```bash
+cd terraform/live/bootstrap/github-oidc
+terragrunt backend bootstrap              # first time only: creates the state bucket app-tfstate-065148239770-us-east-1
+terragrunt apply                          # type yes
+```
+
+This creates the OIDC provider and three roles (see section 6.1).
+
+The repository's numeric owner and repository IDs are set in that folder's `terragrunt.hcl`. GitHub puts them into the login token (`repo:owner@id/name@id:...`), and the roles trust exactly that form. If the repository is ever recreated, update the two IDs and apply again.
+
+## 4. Part B: first deployment
+
+### B1. Run the pipeline
+
+GitHub, Actions tab, `deploy`, Run workflow, branch `master`. The jobs run in order:
+
+1. `changes` decides which parts run (a manual run runs everything).
+2. `infra` creates VPC, ECR, EKS, RDS and the ALB controller (about 20 minutes), then installs Argo CD, creates the `database` secret and applies `argocd/application.yaml`.
+3. `test`, `build`, `release` build the images and commit their tag.
+
+Pods may show `ImagePullBackOff` until `release` has written the tag. They recover on their own.
+
+### B2. Connect kubectl
+
+```bash
+aws eks update-kubeconfig --region us-east-1 --name app-study
+kubectl get nodes
+```
+
+The IAM user `admin` is a cluster administrator through an EKS access entry defined in `terraform/live/study/eks/terragrunt.hcl` (`admin_principal_arns`). The CI role is an administrator because it created the cluster.
+
+### B3. Let Argo CD read the repository (needed when the repository is private)
+
+Argo CD reads the repo over SSH with a read-only deploy key.
+
+```bash
+ssh-keygen -t ed25519 -N "" -C argocd-readonly -f /tmp/argocd_deploy
+cat /tmp/argocd_deploy.pub
+```
+
+GitHub, repository Settings, Deploy keys, Add deploy key: paste the public key, leave "Allow write access" unchecked. Then give the private key to Argo CD:
+
+```bash
+kubectl -n argocd create secret generic repo-full-app-eks \
+  --from-literal=type=git \
+  --from-literal=url=git@github.com:akhilthekkuveettil/full-app-eks.git \
+  --from-file=sshPrivateKey=/tmp/argocd_deploy
+kubectl -n argocd label secret repo-full-app-eks argocd.argoproj.io/secret-type=repository
+kubectl apply -f argocd/application.yaml
+shred -u /tmp/argocd_deploy /tmp/argocd_deploy.pub
+kubectl -n argocd get application app        # Synced / Healthy
+```
+
+The Secret's `url` and the Application's `repoURL` must be identical, because Argo CD finds the credentials by matching them. The label is what makes Argo CD treat the Secret as repository credentials.
+
+### B4. Check the cluster
+
+```bash
+kubectl get pods -A                      # everything Running
+kubectl get ingress -A                   # both Ingresses show the same ALB address
+```
+
+### B5. Point DNS at the load balancer
+
+In GoDaddy, add two CNAME records, both pointing to the ALB address from `kubectl get ingress -A`:
+
+| Name | Type | Value |
+|---|---|---|
+| `k8application` | CNAME | the ALB hostname |
+| `argocd` | CNAME | the same ALB hostname |
+
+The certificate is a wildcard, so no certificate change is needed. If the ALB is ever recreated its hostname changes; update both records.
+
+### B6. Log in to Argo CD
+
+```bash
+kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath='{.data.password}' | base64 -d; echo
+```
+
+Open `https://argocd.aryanconcretespares.in`, user `admin`. Change the password in the UI (User Info) and delete the initial secret afterwards.
+
+### B7. Verify
+
+- `https://k8application.aryanconcretespares.in` loads the status page and shows four healthy services.
+- `http://` redirects to `https://`.
+- Argo CD shows application `app` as Synced and Healthy.
+
+## 5. Part C: everyday operations
+
+| Task | How |
+|---|---|
+| Ship a code change | Merge or push to `master`. Tests, build and release run; Argo CD rolls out. No approval step. |
+| Roll back | `git revert` the `chore: deploy images <sha>` commit and push. Argo CD returns to the previous tag. |
+| Change infrastructure | Open a pull request; read the `plan` job. After merging, Actions, Run workflow. Pushes alone never apply infrastructure. |
+| Change `argocd/` files | Merge, then Run workflow (or `kubectl apply -f argocd/application.yaml`). |
+| Change database credentials | Re-run the workflow; the `database` secret is rewritten from Terraform's output. |
+
+## 6. Security measures
+
+### 6.1 Identity and CI
+
+- **No stored AWS keys.** GitHub Actions logs in with short-lived OIDC tokens. Nothing secret is saved in GitHub.
+- **Three narrow roles**, each trusted for one kind of run, matched on the token's exact subject (including the numeric owner and repository IDs, so a renamed or recreated repository cannot take them over):
+  - `app-github-plan`: pull requests only, `ReadOnlyAccess`. A plan can never change anything.
+  - `app-github-images`: pushes to `master` only, ECR push to `app/*` and nothing else.
+  - `app-github-infra`: `master` only, administrator. The workflow uses it only on a manual "Run workflow".
+- **Infrastructure applies only on a manual click.** GitHub's required-reviewer gate is not available for private repositories on the Free plan, so the trigger itself is the approval.
+- **The role definitions live outside the stack the pipeline applies** (`live/bootstrap`), so a pipeline run cannot rewrite its own permissions.
+- Terraform state is in a private, encrypted S3 bucket with native locking.
+- The database URL is masked in workflow logs.
+
+### 6.2 Supply chain
+
+- Base images are pinned by digest (`@sha256:...`) in all five Dockerfiles.
+- Backend dependencies are installed with `pip --require-hashes`, which rejects any package whose hash differs from `requirements.txt`.
+- ECR scans every image on push, and keeps only the last 10 images per repository.
+- Images are tagged with the commit, never `latest`, so every deployment is traceable and reversible.
+- The pipeline downloads Terragrunt with a checksum check.
+- Backend tests must pass before anything is built.
+
+### 6.3 Network
+
+- Nodes and the database sit in private subnets. Only the load balancer is public.
+- The database is not publicly accessible. Its security group accepts port 5432 only from the cluster's security group.
+- TLS ends at the load balancer with a wildcard ACM certificate; port 80 redirects to 443.
+- One load balancer serves both hosts, which keeps the exposed surface to one entry point.
+- The frontend's nginx hides its version and sends `X-Content-Type-Options`, `X-Frame-Options: DENY`, `Referrer-Policy: no-referrer`, `Cross-Origin-Resource-Policy` and `Permissions-Policy` headers.
+- The browser reaches the backends only through the frontend's `/api/backendN/` paths; the backend services have no public address.
+
+### 6.4 Cluster
+
+- Access uses EKS access entries (API authentication), not the legacy `aws-auth` ConfigMap. Only the CI role and `user/admin` are administrators.
+- Nodes require IMDSv2 and have a metadata hop limit of 1, so pods cannot read the node's IAM credentials. Pods use IRSA instead (the ALB controller has its own role bound to its service account).
+- Node root volumes are encrypted gp3.
+- Control-plane `audit` and `authenticator` logs go to CloudWatch with 7-day retention.
+- Containers run as non-root users (UID 10001 for the backends, UID 101 for the unprivileged nginx image) and have CPU and memory requests and limits. Readiness and liveness probes are set.
+- Argo CD runs with `prune` and `selfHeal`: manual changes in the cluster are reverted to what git says.
+
+### 6.5 Data and secrets
+
+- RDS storage is encrypted. The database lives in private subnets.
+- The database password is generated by Terraform and never committed. The Kubernetes `database` secret is created by the pipeline, not stored in git. The application reads it from an environment variable and has no default.
+- Argo CD reads the repository with a read-only deploy key scoped to this single repository.
+
+### 6.6 Known gaps, in suggested order of priority
+
+| Gap | Risk | Fix |
+|---|---|---|
+| RDS has no backups, no deletion protection, no final snapshot | Data loss on an accidental destroy | `backup_retention_period = 7`, `deletion_protection = true`, final snapshot, `manage_master_user_password = true` (password then leaves Terraform state). Note: this blocks `terragrunt destroy` until switched off. |
+| The database password sits in the Terraform state | Anyone with state access can read it | RDS-managed password plus External Secrets reading AWS Secrets Manager or SSM |
+| Kubernetes API endpoint open to `0.0.0.0/0` | Protected by IAM only | Restrict `public_access_cidrs`, or move to a private endpoint with a VPN |
+| Argo CD UI reachable from the internet | Brute force on `admin` | Restrict the argocd host by source IP on the ALB, disable the local `admin`, add SSO |
+| No `NetworkPolicy` | Any pod can reach any pod and the database | Default-deny policy for namespace `app`, then allow frontend to backends and backends to the database |
+| No pod `securityContext` (runAsNonRoot, read-only root filesystem, drop all capabilities) | Weaker container isolation | Add to every Deployment |
+| Single replicas, no PodDisruptionBudget | An upgrade or node loss causes downtime | 2 replicas, a PodDisruptionBudget and topology spread across zones |
+| `app-github-infra` is full administrator | A compromised `master` workflow can control the account | Scope the policy to the services in use, and protect `master` with branch rules |
+| Third-party actions are pinned to version tags, not commit SHAs | A tag could be moved | Pin by SHA |
+| No vulnerability gate in CI | Known CVEs can be deployed (ECR only reports them) | Add a Trivy step that fails on high severity |
+| One NAT gateway and a single-AZ database | An AZ outage takes the app down | Multi-AZ RDS and a NAT per AZ (costs more) |
+| No billing alert | A forgotten cluster keeps costing | AWS Budgets alert |
+
+## 7. Part D: teardown
+
+`scripts/down.sh` only removes namespace `app`. Argo CD's own Ingress joins the same load balancer, and Argo CD would recreate what is deleted, so remove those first:
+
+```bash
+kubectl -n argocd delete application app          # stop Argo CD recreating things
+helm uninstall argocd -n argocd                   # removes its Ingress from the shared ALB
+kubectl delete namespace app --timeout=300s
+sleep 60                                          # the controller deletes the ALB
+cd terraform/live/study && terragrunt run --all destroy
+```
+
+The state bucket and the `github-oidc` roles stay. Destroying will fail on RDS if deletion protection has been enabled (section 6.6).
+
+## 8. Troubleshooting notes from this project
+
+| Symptom | Cause | Fix |
+|---|---|---|
+| `Not authorized to perform sts:AssumeRoleWithWebIdentity` | GitHub puts numeric IDs in the token subject; the role trusted the plain `repo:owner/name` form | The OIDC module trusts both forms; the IDs are set in `live/bootstrap/github-oidc/terragrunt.hcl` |
+| `release` job skipped although `build` passed | A skipped job anywhere up the `needs` chain skips downstream jobs unless they use `always()` | `release` has `if: always() && needs.build.result == 'success'` |
+| `pip`: "Hashes are required in --require-hashes mode" | One hashed requirement switches the whole command to hash mode | Install `requirements.txt` first, then `requirements-dev.txt` in a second command |
+| `ModuleNotFoundError: No module named 'app'` in tests | Plain `pytest` does not add the current folder to the import path | Use `python -m pytest` |
+| Argo CD `Unknown`, "unable to authenticate ... publickey" | GitHub did not accept the deploy key (not added, or the wrong key) | Add the public key under the repository's Deploy keys; Argo CD retries on its own |
+| `git push` rejected, "fetch first" | The pipeline's `release` job added a commit | `git pull --rebase origin master`, then push |
+| `git push` denied for the wrong GitHub user | The laptop used the other account's SSH key | `git config core.sshCommand "ssh -i ~/.ssh/id_ed25519_github2 -o IdentitiesOnly=yes"` |
+| `kubectl` says `Unauthorized` | The IAM user has no EKS access entry | `admin_principal_arns` in `live/study/eks/terragrunt.hcl`, then Run workflow |
