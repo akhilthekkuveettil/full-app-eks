@@ -1,6 +1,7 @@
 # Helm values for kube-prometheus-stack (chart 92.14.1), deployed by argocd/monitoring.yaml.
 # Sized for three t3.small nodes: small requests, memory limits, 7 days of metrics on one 10 GiB volume.
-# Grafana is not exposed: kubectl -n monitoring port-forward svc/monitoring-grafana 3000:80
+# Grafana is served at https://monitoring.aryanconcretespares.in through the shared ALB (group "shared", like the app
+# and Argo CD); TLS ends at the ALB with the wildcard ACM certificate. DNS: a CNAME to the ALB hostname at GoDaddy.
 
 # EKS runs these control plane parts outside the cluster, so they cannot be scraped and would only raise false alerts
 kubeEtcd:
@@ -44,6 +45,28 @@ alertmanager:
       limits: { memory: 96Mi }
 
 grafana:
+  ingress:
+    enabled: true
+    ingressClassName: alb
+    hosts:
+      - monitoring.aryanconcretespares.in
+    path: /
+    pathType: Prefix
+    annotations:
+      alb.ingress.kubernetes.io/group.name: shared
+      alb.ingress.kubernetes.io/scheme: internet-facing
+      alb.ingress.kubernetes.io/target-type: ip
+      alb.ingress.kubernetes.io/healthcheck-path: /api/health
+      alb.ingress.kubernetes.io/listen-ports: '[{"HTTP": 80}, {"HTTPS": 443}]'
+      alb.ingress.kubernetes.io/certificate-arn: arn:aws:acm:us-east-1:065148239770:certificate/b7c41608-bb26-4e4c-aad2-39d15c05f920
+      alb.ingress.kubernetes.io/ssl-redirect: '443'
+  grafana.ini:
+    server:
+      root_url: https://monitoring.aryanconcretespares.in
+    users:
+      allow_sign_up: false
+    auth.anonymous:
+      enabled: false
   # the Secret "grafana-admin" is created by the infra job; the password is not in git
   admin:
     existingSecret: grafana-admin
