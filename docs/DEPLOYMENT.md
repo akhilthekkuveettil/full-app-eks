@@ -21,7 +21,7 @@ Account `065148239770`, region `us-east-1`. Everything is deployed from GitHub A
             v
    backend1..backend4 (FastAPI) ----> RDS PostgreSQL 16 (private subnets)
 
-   EKS cluster app-study: 3 x t3.medium nodes in private subnets, 2 AZs
+   EKS cluster app-study: 2 x c7i-flex.large nodes in private subnets, 2 AZs
    Images: ECR repositories app/backend1..4 and app/frontend
    GitOps: Argo CD reads this repo over SSH and keeps namespace "app" equal to kubernetes/
 ```
@@ -43,8 +43,8 @@ Estimate for running 24/7 in `us-east-1`, from AWS list prices (730 hours per mo
 | Item | Basis | $ / month |
 |---|---|---|
 | EKS control plane | $0.10 per hour | 73 |
-| Three worker nodes | 3 x t3.medium on-demand, $0.0416 per hour each | 91 |
-| Node disks | 3 x 20 GiB gp3 | 5 |
+| Two worker nodes | 2 x c7i-flex.large on-demand, about $0.0848 per hour each (the AWS Free plan allows only a few instance types; t3.medium is not one) | 124 |
+| Node disks | 2 x 20 GiB gp3 | 3 |
 | Monitoring volume | one 10 GiB gp3 for Prometheus | 1 |
 | NAT gateway | $0.045 per hour, plus a little data | 34 |
 | Load balancer | one ALB, $0.0225 per hour plus about 1 LCU | 22 |
@@ -52,9 +52,9 @@ Estimate for running 24/7 in `us-east-1`, from AWS list prices (730 hours per mo
 | RDS PostgreSQL | db.t4g.micro single-AZ plus 20 GiB gp3 | 14 |
 | ECR, CloudWatch logs, S3 state, data transfer | small | 5 to 10 |
 | Route 53, ACM certificate | DNS is at GoDaddy, ACM is free | 0 |
-| **Total** | | **about 256 to 266** |
+| **Total** | | **about 287 to 292** |
 
-That is about $0.36 per hour. The EKS control plane (28 percent) and the NAT gateway (13 percent) are the two largest items and cannot be removed without changing the design.
+That is about $0.40 per hour. The EKS control plane (25 percent) and the NAT gateway (12 percent) are the two largest items and cannot be removed without changing the design.
 
 Ways to spend less, with the trade-off:
 
@@ -62,12 +62,12 @@ Ways to spend less, with the trade-off:
 |---|---|---|
 | Replace the NAT gateway with a NAT instance (fck-nat, t4g.nano) | about $30 | One small instance is a single point of failure for outbound traffic |
 | Spot instances for the nodes | about $15 to 20 | Nodes can be reclaimed with two minutes' notice |
-| One t3.medium node fewer | about $30 | No spare capacity and no zone redundancy |
+| One node instead of two | about $62 | No spare capacity and no zone redundancy |
 | Destroy the stack when it is not needed (section 7) | nearly everything while it is down | Rebuild takes about 20 minutes and the database is lost unless backed up |
 
-Hardening in section 6.6 adds cost: Multi-AZ RDS about $14 more, a NAT gateway per zone about $33 more, each Secrets Manager secret $0.40, AWS WAF from about $5. Budgeted for those, a realistic ceiling is $290 per month.
+Hardening in section 6.6 adds cost: Multi-AZ RDS about $14 more, a NAT gateway per zone about $33 more, each Secrets Manager secret $0.40, AWS WAF from about $5. Budgeted for those, a realistic ceiling is $340 per month.
 
-Set an AWS Budgets alert at about $280 per month, notifying at 80 and 100 percent. The first two budgets in an account are free.
+Set an AWS Budgets alert at about $320 per month, notifying at 80 and 100 percent. The first two budgets in an account are free.
 
 ### Monitoring
 

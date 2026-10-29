@@ -21,9 +21,10 @@ inputs = {
   # public API endpoint is open to everyone for the study; set ["<your ip>/32"] to restrict
   public_access_cidrs = ["0.0.0.0/0"]
 
-  # three t3.medium nodes (4 GB, 17 pods each): t3.small nodes ran out of memory and went NotReady under monitoring and dev
-  node_instance_type = "t3.medium"
-  node_count         = 3
+  # two c7i-flex.large nodes (4 GB, 29 pods each): t3.small nodes ran out of memory and went NotReady under monitoring and dev;
+  # t3.medium is not allowed on the AWS Free plan, c7i-flex.large is (list: describe-instance-types free-tier-eligible=true)
+  node_instance_type = "c7i-flex.large"
+  node_count         = 2
 
   # kubectl from the laptop; the CI role is admin already because it created the cluster
   admin_principal_arns = ["arn:aws:iam::065148239770:user/admin"]
