@@ -1,0 +1,13 @@
+# EBS gp3 volumes through the EBS CSI driver add-on (terraform/modules/eks). Not the default class on purpose:
+# workloads that need a disk name it (storageClassName: gp3).
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: gp3
+provisioner: ebs.csi.aws.com
+volumeBindingMode: WaitForFirstConsumer
+allowVolumeExpansion: true
+reclaimPolicy: Delete
+parameters:
+  type: gp3
+  encrypted: "true"

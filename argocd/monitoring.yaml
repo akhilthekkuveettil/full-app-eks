@@ -1,0 +1,32 @@
+# Argo CD Application: kube-prometheus-stack from the community Helm repo, with values from this repo.
+#   kubectl apply -f argocd/monitoring.yaml      (the deploy workflow does this)
+# The Secret "grafana-admin" and the StorageClass "gp3" are created by the workflow before the first sync.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: monitoring
+  namespace: argocd
+spec:
+  project: default
+  sources:
+    - repoURL: https://prometheus-community.github.io/helm-charts
+      chart: kube-prometheus-stack
+      targetRevision: 92.14.1
+      helm:
+        releaseName: monitoring
+        valueFiles:
+          - $values/monitoring/values.yaml
+    - repoURL: git@github.com:akhilthekkuveettil/full-app-eks.git
+      targetRevision: master
+      ref: values
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: monitoring
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      # the chart's CRDs are too large for client-side apply
+      - ServerSideApply=true

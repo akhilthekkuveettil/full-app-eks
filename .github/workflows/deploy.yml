@@ -144,6 +144,16 @@ jobs:
             -n argocd --create-namespace -f argocd/values.yaml --wait --timeout 10m
           kubectl apply -f argocd/application.yaml
 
+      - name: Monitoring
+        run: |
+          kubectl apply -f platform/storageclass-gp3.yaml
+          kubectl create namespace monitoring --dry-run=client -o yaml | kubectl apply -f -
+          # first run only: a random Grafana admin password, kept in the cluster and never in git
+          kubectl -n monitoring get secret grafana-admin >/dev/null 2>&1 || \
+            kubectl -n monitoring create secret generic grafana-admin \
+              --from-literal=admin-user=admin --from-literal=admin-password="$(openssl rand -base64 24 | tr -d '/+=')"
+          kubectl apply -f argocd/monitoring.yaml
+
   build:
     # waits for the infrastructure (the ECR repositories come from it); runs when infra was skipped too
     needs: [changes, test, infra]
