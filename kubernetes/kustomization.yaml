@@ -12,16 +12,16 @@ resources:
 images:
   - name: backend1
     newName: 065148239770.dkr.ecr.us-east-1.amazonaws.com/app/backend1
-    newTag: 52b79b7
+    newTag: 780529e
   - name: backend2
     newName: 065148239770.dkr.ecr.us-east-1.amazonaws.com/app/backend2
-    newTag: 52b79b7
+    newTag: 780529e
   - name: backend3
     newName: 065148239770.dkr.ecr.us-east-1.amazonaws.com/app/backend3
-    newTag: 52b79b7
+    newTag: 780529e
   - name: backend4
     newName: 065148239770.dkr.ecr.us-east-1.amazonaws.com/app/backend4
-    newTag: 52b79b7
+    newTag: 780529e
   - name: frontend
     newName: 065148239770.dkr.ecr.us-east-1.amazonaws.com/app/frontend
-    newTag: 52b79b7
+    newTag: 780529e
