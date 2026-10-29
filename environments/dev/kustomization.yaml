@@ -1,0 +1,23 @@
+# Dev environment: the same manifests and images as kubernetes/ (prod), in namespace app-dev with its own host and database.
+# Argo CD application: argocd/app-dev.yaml.  Render it:  kubectl kustomize environments/dev
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - ../../kubernetes
+
+namespace: app-dev
+
+patches:
+  # dev has its own host on the shared load balancer
+  - target: { kind: Ingress, name: frontend }
+    patch: |-
+      - op: replace
+        path: /spec/rules/0/host
+        value: dev.aryanconcretespares.in
+  # nginx in the frontend finds the backends by their full service name, which includes the namespace
+  - target: { kind: Deployment, name: frontend }
+    patch: |-
+      - op: replace
+        path: /spec/template/spec/containers/0/env/0/value
+        value: .app-dev.svc.cluster.local

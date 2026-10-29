@@ -21,8 +21,8 @@ inputs = {
   # public API endpoint is open to everyone for the study; set ["<your ip>/32"] to restrict
   public_access_cidrs = ["0.0.0.0/0"]
 
-  # three nodes: the monitoring stack and Argo CD do not fit on two t3.small (11 pods and ~1.4 GB each)
-  node_count = 3
+  # four nodes: a t3.small allows only 11 pods and its DaemonSets use 4 of them; app, Argo CD, monitoring and dev need the room
+  node_count = 4
 
   # kubectl from the laptop; the CI role is admin already because it created the cluster
   admin_principal_arns = ["arn:aws:iam::065148239770:user/admin"]

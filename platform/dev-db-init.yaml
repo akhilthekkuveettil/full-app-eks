@@ -1,0 +1,31 @@
+# Creates the database appdb_dev on the shared RDS instance if it does not exist yet. Run by the deploy workflow.
+# Dev and prod share one instance (and one master user) but never share data.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: db-init
+  namespace: app-dev
+spec:
+  backoffLimit: 3
+  ttlSecondsAfterFinished: 300
+  template:
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: psql
+          image: postgres:16-alpine
+          env:
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: database
+                  key: DATABASE_URL
+          command: [sh, -c]
+          args:
+            - |
+              ADMIN=$(echo "$DATABASE_URL" | sed 's#/appdb_dev?#/postgres?#')
+              psql "$ADMIN" -tc "SELECT 1 FROM pg_database WHERE datname = 'appdb_dev'" | grep -q 1 \
+                || psql "$ADMIN" -c "CREATE DATABASE appdb_dev"
+          resources:
+            requests: { cpu: 10m, memory: 32Mi }
+            limits: { memory: 96Mi }

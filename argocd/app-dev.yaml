@@ -1,0 +1,21 @@
+# Argo CD Application for the dev environment: namespace app-dev, host dev.aryanconcretespares.in, database appdb_dev.
+#   kubectl apply -f argocd/app-dev.yaml      (the deploy workflow does this)
+# The Secret "database" in app-dev and the database itself are created by the workflow (see platform/dev-db-init.yaml).
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: app-dev
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: git@github.com:akhilthekkuveettil/full-app-eks.git
+    targetRevision: master
+    path: environments/dev
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: app-dev
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true

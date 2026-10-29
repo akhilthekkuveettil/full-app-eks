@@ -154,6 +154,19 @@ jobs:
               --from-literal=admin-user=admin --from-literal=admin-password="$(openssl rand -base64 24 | tr -d '/+=')"
           kubectl apply -f argocd/monitoring.yaml
 
+      - name: Dev environment
+        run: |
+          DATABASE_URL=$(cd terraform/live/study/rds && terragrunt output -raw database_url)
+          DEV_URL=$(echo "$DATABASE_URL" | sed 's#/appdb?#/appdb_dev?#')
+          echo "::add-mask::$DEV_URL"
+          kubectl create namespace app-dev --dry-run=client -o yaml | kubectl apply -f -
+          kubectl -n app-dev create secret generic database --from-literal=DATABASE_URL="$DEV_URL" \
+            --dry-run=client -o yaml | kubectl apply -f -
+          kubectl -n app-dev delete job db-init --ignore-not-found
+          kubectl apply -f platform/dev-db-init.yaml
+          kubectl -n app-dev wait --for=condition=complete job/db-init --timeout=180s
+          kubectl apply -f argocd/app-dev.yaml
+
   build:
     # waits for the infrastructure (the ECR repositories come from it); runs when infra was skipped too
     needs: [changes, test, infra]
