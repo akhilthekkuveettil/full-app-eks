@@ -21,8 +21,9 @@ inputs = {
   # public API endpoint is open to everyone for the study; set ["<your ip>/32"] to restrict
   public_access_cidrs = ["0.0.0.0/0"]
 
-  # four nodes: a t3.small allows only 11 pods and its DaemonSets use 4 of them; app, Argo CD, monitoring and dev need the room
-  node_count = 4
+  # three t3.medium nodes (4 GB, 17 pods each): t3.small nodes ran out of memory and went NotReady under monitoring and dev
+  node_instance_type = "t3.medium"
+  node_count         = 3
 
   # kubectl from the laptop; the CI role is admin already because it created the cluster
   admin_principal_arns = ["arn:aws:iam::065148239770:user/admin"]
