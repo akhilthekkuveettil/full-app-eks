@@ -1,9 +1,10 @@
 # One pipeline, in order: infrastructure first, then the application.
 #   pull request  plan (read-only role) + backend tests
-#   push to master  test -> build and push images -> write the new tag into kubernetes/kustomization.yaml
-#                   -> Argo CD rolls the new images out
-#   Run workflow    infra apply first (the click is the approval; environments cannot require reviewers on a
+#   push to master  plan when terraform/ changed, then test -> build and push images -> write the new tag into
+#                   kubernetes/kustomization.yaml -> Argo CD rolls the new images out
+#   Run workflow    plan, then infra apply (the click is the approval; environments cannot require reviewers on a
 #                   private repo on the Free plan), then the same app steps
+# The plan runs whenever terraform/ changed (pull request, push, Run workflow) and must pass before an apply.
 # Infra applies only from "Run workflow" (workflow_dispatch), which runs everything; use it after editing terraform/ or argocd/.
 # The app steps run on a push when a service folder or this file changed.
 name: deploy
@@ -53,7 +54,7 @@ jobs:
 
   plan:
     needs: changes
-    if: github.event_name == 'pull_request' && needs.changes.outputs.infra == 'true'
+    if: needs.changes.outputs.infra == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -69,9 +70,10 @@ jobs:
           sudo install -m 0755 terragrunt_linux_amd64 /usr/local/bin/terragrunt
       - uses: aws-actions/configure-aws-credentials@v4
         with:
-          role-to-assume: arn:aws:iam::${{ env.ACCOUNT_ID }}:role/app-github-plan
+          # the read-only role is trusted for pull requests only; on master the plan uses the infra role (also trusted for master)
+          role-to-assume: arn:aws:iam::${{ env.ACCOUNT_ID }}:role/${{ github.event_name == 'pull_request' && 'app-github-plan' || 'app-github-infra' }}
           aws-region: ${{ env.AWS_REGION }}
-      - name: Plan (read-only role, no state lock)
+      - name: Plan (no state lock)
         working-directory: terraform/live/study
         run: terragrunt run --all plan --non-interactive -- -lock=false
 
@@ -99,8 +101,8 @@ jobs:
           python -m pytest -q
 
   infra:
-    needs: changes
-    if: github.event_name == 'workflow_dispatch'
+    needs: [changes, plan]
+    if: github.event_name == 'workflow_dispatch' && needs.plan.result == 'success'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -169,11 +171,12 @@ jobs:
 
   build:
     # waits for the infrastructure (the ECR repositories come from it); runs when infra was skipped too
-    needs: [changes, test, infra]
+    needs: [changes, test, plan, infra]
     if: >-
       always() && github.event_name != 'pull_request'
       && needs.changes.outputs.app == 'true'
       && needs.test.result == 'success'
+      && needs.plan.result != 'failure'
       && (needs.infra.result == 'success' || needs.infra.result == 'skipped')
     runs-on: ubuntu-latest
     strategy:
