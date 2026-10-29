@@ -3,6 +3,15 @@
 #
 # The ALB terminates HTTPS with the wildcard ACM certificate, so the Argo CD server itself speaks plain HTTP.
 # The Ingress joins ALB group "shared": every Ingress with the same group.name is served by ONE load balancer.
+# Not used here (no SSO, no notifications, no ApplicationSets). Each one is a pod, and a t3.small node only allows 11 pods,
+# so switching them off keeps room for the app and the monitoring stack.
+dex:
+  enabled: false
+notifications:
+  enabled: false
+applicationSet:
+  replicas: 0
+
 configs:
   params:
     server.insecure: true
