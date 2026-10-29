@@ -57,6 +57,12 @@ grafana:
       alb.ingress.kubernetes.io/scheme: internet-facing
       alb.ingress.kubernetes.io/target-type: ip
       alb.ingress.kubernetes.io/healthcheck-path: /api/health
+      # Grafana is a single pod: a slow answer under load must not drop it from the load balancer (that is the 503).
+      # It is marked unhealthy only after 5 failed checks 30 seconds apart.
+      alb.ingress.kubernetes.io/healthcheck-interval-seconds: '30'
+      alb.ingress.kubernetes.io/healthcheck-timeout-seconds: '10'
+      alb.ingress.kubernetes.io/healthy-threshold-count: '2'
+      alb.ingress.kubernetes.io/unhealthy-threshold-count: '5'
       alb.ingress.kubernetes.io/listen-ports: '[{"HTTP": 80}, {"HTTPS": 443}]'
       alb.ingress.kubernetes.io/certificate-arn: arn:aws:acm:us-east-1:065148239770:certificate/b7c41608-bb26-4e4c-aad2-39d15c05f920
       alb.ingress.kubernetes.io/ssl-redirect: '443'
@@ -74,8 +80,18 @@ grafana:
     passwordKey: admin-password
   # Grafana 13 needs more than 256Mi: at that limit it was OOM-killed, answered probes slowly and the ALB had no healthy target (503)
   resources:
-    requests: { cpu: 100m, memory: 192Mi }
+    requests: { cpu: 250m, memory: 192Mi }
     limits: { memory: 512Mi }
+  # the chart's readiness probe waits 1 second; Grafana often answers slower while Prometheus runs heavy queries
+  readinessProbe:
+    httpGet:
+      path: /api/health
+      port: grafana
+    timeoutSeconds: 5
+    periodSeconds: 10
+    failureThreshold: 6
+  # dashboards refresh once a minute, not every 10 seconds, so a few open tabs do not keep Prometheus and Grafana busy
+  defaultDashboardsInterval: 1m
   sidecar:
     resources:
       requests: { cpu: 10m, memory: 48Mi }
