@@ -5,6 +5,7 @@ metadata:
   namespace: app
 spec:
   replicas: 2
+  revisionHistoryLimit: 3
   selector:
     matchLabels:
       app: backend1
@@ -55,6 +56,7 @@ metadata:
   namespace: app
 spec:
   replicas: 2
+  revisionHistoryLimit: 3
   selector:
     matchLabels:
       app: backend2
@@ -105,6 +107,7 @@ metadata:
   namespace: app
 spec:
   replicas: 2
+  revisionHistoryLimit: 3
   selector:
     matchLabels:
       app: backend3
@@ -155,6 +158,7 @@ metadata:
   namespace: app
 spec:
   replicas: 2
+  revisionHistoryLimit: 3
   selector:
     matchLabels:
       app: backend4

@@ -274,19 +274,21 @@ Open `https://argocd.aryanconcretespares.in`, user `admin`. Change the password 
 | One NAT gateway and a single-AZ database | An AZ outage takes the app down | Multi-AZ RDS and a NAT per AZ (costs more) |
 | No billing alert | A forgotten cluster keeps costing | AWS Budgets alert |
 
-## 7. Part D: teardown
+## 7. Part D: one-command up and down
 
-`scripts/down.sh` only removes namespace `app`. Argo CD's own Ingress joins the same load balancer, and Argo CD would recreate what is deleted, so remove those first:
+From a laptop with AWS credentials (account `065148239770`), `docker`, `helm`, `kubectl`, `terragrunt` and `terraform`:
 
 ```bash
-kubectl -n argocd delete application app          # stop Argo CD recreating things
-helm uninstall argocd -n argocd                   # removes its Ingress from the shared ALB
-kubectl delete namespace app --timeout=300s
-sleep 60                                          # the controller deletes the ALB
-cd terraform/live/study && terragrunt run --all destroy
+scripts/up.sh                    # everything: infrastructure, images, Argo CD, ALB and Ingresses, app, monitoring (about 20-25 minutes)
+scripts/up.sh --no-monitoring    # without Prometheus and Grafana (6 pods and about 1 GB less)
+scripts/down.sh                  # destroys everything that costs money; the Terraform state bucket stays
 ```
 
-The state bucket and the `github-oidc` roles stay. Destroying will fail on RDS if deletion protection has been enabled (section 6.6).
+`-y` skips the confirmation question. The first `up.sh` run creates a read-only SSH key (`~/.config/full-app-eks/argocd_deploy`), prints the public half and stops: add it under the repository's Settings, Deploy keys, then run it again. The key is kept, so later runs need no setup.
+
+Every rebuild creates a new load balancer with a new hostname, so after `up.sh` update the GoDaddy CNAMEs (`k8application`, `argocd`, `monitoring`) to the address it prints. The database is empty after a rebuild. Images are rebuilt from the working tree with the tag in `kubernetes/kustomization.yaml` when ECR does not have it.
+
+`down.sh` deletes the Argo CD Applications first (or Argo CD would recreate things), uninstalls Argo CD, deletes the namespaces so the controller removes the load balancer, waits for it to disappear, and then runs `terragrunt run --all destroy`. It will fail on RDS if deletion protection has been enabled (section 6.6).
 
 ## 8. Troubleshooting notes from this project
 

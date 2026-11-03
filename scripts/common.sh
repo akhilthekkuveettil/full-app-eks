@@ -2,7 +2,8 @@
 REGION=us-east-1
 CLUSTER=app-study
 SERVICES="backend1 backend2 backend3 backend4 frontend"
-IMAGE_TAG=v1
+# the image tag that kubernetes/kustomization.yaml deploys (the pipeline writes it there)
+IMAGE_TAG=$(sed -n 's/^ *newTag: *//p' "$(dirname "${BASH_SOURCE[0]}")/../kubernetes/kustomization.yaml" | head -1)
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 LIVE="$ROOT/terraform/live/study"
@@ -27,10 +28,9 @@ need() {
   done
 }
 
-# kubernetes/kustomization.yaml holds ACCOUNT_ID / REGION placeholders; fill them on the fly
-render() {
-  kubectl kustomize "$ROOT/kubernetes" | sed "s/ACCOUNT_ID/$ACCOUNT_ID/g; s/REGION/$REGION/g"
-}
+# the read-only SSH key that lets Argo CD read the git repository; kept between up.sh runs, so it is made once
+ARGOCD_KEY=${ARGOCD_DEPLOY_KEY:-$HOME/.config/full-app-eks/argocd_deploy}
+REPO_URL=$(sed -n 's/^ *repoURL: *//p' "$ROOT/argocd/application.yaml" | head -1)
 
 # confirm "<what will happen>" "$@"  -- asks for 'yes' unless -y was passed to the script
 confirm() {
@@ -38,7 +38,7 @@ confirm() {
   shift
   echo "AWS account $ACCOUNT_ID, region $REGION"
   echo "$message"
-  case "${1:-}" in -y) return 0 ;; esac
+  for a in "$@"; do [ "$a" = -y ] && return 0; done
   read -r -p "Type 'yes' to continue: " answer
   [ "$answer" = yes ] || { echo "aborted"; exit 1; }
 }
