@@ -62,32 +62,33 @@ interface Theme {
   id: string;
   name: string;
   accent: string;
+  accent2: string;
   soft: string;
   dark?: boolean;
 }
 
-// accent is the bright colour of marks and fills, soft the deeper one for text and shadows (lighter on dark themes)
+// a gradient from accent to accent2; soft is the deeper colour for text and shadows (lighter on dark themes)
 const THEMES: Theme[] = [
-  { id: 'emerald', name: 'Emerald', accent: '#10b981', soft: '#047857' },
-  { id: 'ocean', name: 'Ocean', accent: '#0ea5e9', soft: '#0369a1' },
-  { id: 'blue', name: 'Kubernetes blue', accent: '#3b82f6', soft: '#1d4ed8' },
-  { id: 'indigo', name: 'Indigo', accent: '#6366f1', soft: '#4338ca' },
-  { id: 'violet', name: 'Violet', accent: '#8b5cf6', soft: '#6d28d9' },
-  { id: 'fuchsia', name: 'Fuchsia', accent: '#d946ef', soft: '#a21caf' },
-  { id: 'pink', name: 'Pink', accent: '#ec4899', soft: '#be185d' },
-  { id: 'rose', name: 'Rose', accent: '#f43f5e', soft: '#be123c' },
-  { id: 'orange', name: 'Orange', accent: '#f97316', soft: '#c2410c' },
-  { id: 'amber', name: 'Amber', accent: '#f59e0b', soft: '#b45309' },
-  { id: 'gold', name: 'Gold', accent: '#eab308', soft: '#a16207' },
-  { id: 'lime', name: 'Lime', accent: '#84cc16', soft: '#4d7c0f' },
-  { id: 'forest', name: 'Forest', accent: '#22c55e', soft: '#15803d' },
-  { id: 'teal', name: 'Teal', accent: '#14b8a6', soft: '#0f766e' },
-  { id: 'cyan', name: 'Cyan', accent: '#06b6d4', soft: '#0e7490' },
-  { id: 'slate', name: 'Slate', accent: '#64748b', soft: '#334155' },
-  { id: 'midnight', name: 'Midnight', accent: '#6366f1', soft: '#a5b4fc', dark: true },
-  { id: 'night-emerald', name: 'Emerald night', accent: '#10b981', soft: '#6ee7b7', dark: true },
-  { id: 'ember', name: 'Ember', accent: '#f97316', soft: '#fdba74', dark: true },
-  { id: 'aurora', name: 'Aurora', accent: '#06b6d4', soft: '#67e8f9', dark: true },
+  { id: 'emerald', name: 'Emerald', accent: '#10b981', accent2: '#0d9488', soft: '#047857' },
+  { id: 'ocean', name: 'Ocean', accent: '#0ea5e9', accent2: '#2563eb', soft: '#0369a1' },
+  { id: 'kubernetes', name: 'Kubernetes', accent: '#326ce5', accent2: '#06b6d4', soft: '#1d4ed8' },
+  { id: 'indigo', name: 'Indigo', accent: '#6366f1', accent2: '#8b5cf6', soft: '#4338ca' },
+  { id: 'violet', name: 'Violet', accent: '#8b5cf6', accent2: '#ec4899', soft: '#6d28d9' },
+  { id: 'fuchsia', name: 'Fuchsia', accent: '#d946ef', accent2: '#f43f5e', soft: '#a21caf' },
+  { id: 'candy', name: 'Candy', accent: '#f472b6', accent2: '#60a5fa', soft: '#be185d' },
+  { id: 'rose', name: 'Rose', accent: '#f43f5e', accent2: '#a855f7', soft: '#be123c' },
+  { id: 'sunset', name: 'Sunset', accent: '#f97316', accent2: '#ec4899', soft: '#c2410c' },
+  { id: 'harvest', name: 'Harvest', accent: '#f59e0b', accent2: '#84cc16', soft: '#b45309' },
+  { id: 'honey', name: 'Honey', accent: '#eab308', accent2: '#f97316', soft: '#a16207' },
+  { id: 'meadow', name: 'Meadow', accent: '#84cc16', accent2: '#22c55e', soft: '#4d7c0f' },
+  { id: 'lagoon', name: 'Lagoon', accent: '#22c55e', accent2: '#0ea5e9', soft: '#15803d' },
+  { id: 'glacier', name: 'Glacier', accent: '#14b8a6', accent2: '#3b82f6', soft: '#0f766e' },
+  { id: 'electric', name: 'Electric', accent: '#06b6d4', accent2: '#6366f1', soft: '#0e7490' },
+  { id: 'steel', name: 'Steel', accent: '#64748b', accent2: '#0ea5e9', soft: '#334155' },
+  { id: 'midnight', name: 'Midnight', accent: '#6366f1', accent2: '#a855f7', soft: '#a5b4fc', dark: true },
+  { id: 'night-emerald', name: 'Emerald night', accent: '#10b981', accent2: '#06b6d4', soft: '#6ee7b7', dark: true },
+  { id: 'ember', name: 'Ember', accent: '#f97316', accent2: '#ef4444', soft: '#fdba74', dark: true },
+  { id: 'aurora', name: 'Aurora', accent: '#22d3ee', accent2: '#a78bfa', soft: '#67e8f9', dark: true },
 ];
 const THEME_KEY = 'theme';
 
@@ -218,6 +219,7 @@ function plot(samples: Sample[], w: number, h: number, max: number) {
   host: {
     '[attr.data-mode]': "current().dark ? 'dark' : null",
     '[style.--accent]': 'current().accent',
+    '[style.--accent-2]': 'current().accent2',
     '[style.--accent-soft]': 'current().soft',
   },
 })
@@ -234,7 +236,8 @@ export class App implements OnInit, OnDestroy {
     // page background and browser chrome follow the theme too, not just the component
     effect(() => {
       const theme = this.current();
-      const bg = theme.dark ? mix(theme.accent, '#060a09', 10) : mix(theme.accent, '#ffffff', 6);
+      const mid = mix(theme.accent, theme.accent2, 50);
+      const bg = theme.dark ? mix(mid, '#060a09', 10) : mix(mid, '#ffffff', 6);
       document.documentElement.style.background = bg;
       document.documentElement.style.colorScheme = theme.dark ? 'dark' : 'light';
       document.querySelector('meta[name="theme-color"]')?.setAttribute('content', bg);
@@ -376,9 +379,8 @@ export class App implements OnInit, OnDestroy {
     this.themeId.set(id);
   }
 
-  // a dark theme shows as a circle split between its accent and its night surface
   protected dot(t: Theme) {
-    return t.dark ? `linear-gradient(135deg, ${t.accent} 50%, #0a100e 50%)` : t.accent;
+    return `linear-gradient(135deg, ${t.accent}, ${t.accent2})`;
   }
 
   // one tooltip for all charts: follows the pointer, or sits above the focused mark
