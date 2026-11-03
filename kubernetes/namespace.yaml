@@ -2,3 +2,7 @@ apiVersion: v1
 kind: Namespace
 metadata:
   name: app
+  labels:
+    # the ALB controller adds a readiness gate to pods behind the Ingress: a new pod only counts as
+    # Ready (so the rollout only continues) once the ALB reports its target healthy.
+    elbv2.k8s.aws/pod-readiness-gate-inject: enabled

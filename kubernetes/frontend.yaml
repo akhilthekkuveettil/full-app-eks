@@ -5,7 +5,10 @@ metadata:
   namespace: app
 spec:
   replicas: 2
-  revisionHistoryLimit: 1 
+  revisionHistoryLimit: 1
+  strategy:
+    type: RollingUpdate
+    rollingUpdate: { maxUnavailable: 0, maxSurge: 1 }
   selector:
     matchLabels:
       app: frontend
@@ -14,9 +17,22 @@ spec:
       labels:
         app: frontend
     spec:
+      terminationGracePeriodSeconds: 30
+      # prefer different nodes for the replicas (soft, so rollouts and a single node still schedule)
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                topologyKey: kubernetes.io/hostname
+                labelSelector:
+                  matchLabels: { app: frontend }
       containers:
         - name: frontend
           image: frontend
+          lifecycle:
+            preStop:
+              exec: { command: ["sleep", "10"] }
           ports:
             - containerPort: 8080
           env:

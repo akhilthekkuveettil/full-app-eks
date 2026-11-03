@@ -12,6 +12,8 @@ metadata:
     alb.ingress.kubernetes.io/scheme: internet-facing
     alb.ingress.kubernetes.io/target-type: ip
     alb.ingress.kubernetes.io/healthcheck-path: /
+    # default is 300s: a stopped pod stays "draining" for 5 minutes. 30s is plenty after the preStop sleep.
+    alb.ingress.kubernetes.io/target-group-attributes: deregistration_delay.timeout_seconds=30
     alb.ingress.kubernetes.io/listen-ports: '[{"HTTP": 80}, {"HTTPS": 443}]'
     alb.ingress.kubernetes.io/certificate-arn: arn:aws:acm:us-east-1:065148239770:certificate/b7c41608-bb26-4e4c-aad2-39d15c05f920
     alb.ingress.kubernetes.io/ssl-redirect: '443'

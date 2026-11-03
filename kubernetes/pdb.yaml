@@ -1,0 +1,55 @@
+# Node drains and upgrades may evict at most one pod of each app at a time.
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: backend1
+  namespace: app
+spec:
+  maxUnavailable: 1
+  selector:
+    matchLabels:
+      app: backend1
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: backend2
+  namespace: app
+spec:
+  maxUnavailable: 1
+  selector:
+    matchLabels:
+      app: backend2
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: backend3
+  namespace: app
+spec:
+  maxUnavailable: 1
+  selector:
+    matchLabels:
+      app: backend3
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: backend4
+  namespace: app
+spec:
+  maxUnavailable: 1
+  selector:
+    matchLabels:
+      app: backend4
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: frontend
+  namespace: app
+spec:
+  maxUnavailable: 1
+  selector:
+    matchLabels:
+      app: frontend

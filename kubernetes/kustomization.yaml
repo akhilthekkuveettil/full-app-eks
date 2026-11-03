@@ -8,6 +8,7 @@ resources:
   - backends.yaml
   - frontend.yaml
   - ingress.yaml
+  - pdb.yaml
 
 images:
   - name: backend1
