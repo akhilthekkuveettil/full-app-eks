@@ -1,14 +1,8 @@
 /* Global styles; component styles live in app.css */
 html, body {
   margin: 0;
-  background: #f4f7fd;
+  background: #f0fdf8;
   color-scheme: light;
-}
-
-/* set from app.ts */
-html[data-theme='dark'], html[data-theme='dark'] body {
-  background: #0a1020;
-  color-scheme: dark;
 }
 
 *, *::before, *::after {
