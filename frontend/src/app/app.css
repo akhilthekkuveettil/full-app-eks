@@ -1,60 +1,11 @@
 /* Kubernetes theme, 3D: tiled floor in perspective, extruded tiles that lean towards the pointer, graphs drawn from the live checks.
-   A theme is two colours, --accent and --accent-soft, set from app.ts on the host; the rest is mixed from them.
-   Dark themes also set data-mode='dark'. Status colours (--ok, --bad) never follow the theme. */
+   All 20 themes are dark gradients: a theme is two colours, --accent and --accent-2 (plus --accent-soft, a lighter tint for text),
+   set from app.ts on the host; the rest is mixed from them. Status colours (--ok, --bad) never follow the theme. */
 :host {
   --accent: #10b981;
   --accent-2: #0d9488;
-  --accent-soft: #047857;
+  --accent-soft: #6ee7b7;
   --mid: color-mix(in srgb, var(--accent) 50%, var(--accent-2));
-  --paper: #fff;
-  --bg: color-mix(in srgb, var(--mid) 6%, var(--paper));
-  --surface: color-mix(in srgb, var(--paper) 92%, transparent);
-  --border: color-mix(in srgb, var(--mid) 18%, transparent);
-  --text: color-mix(in srgb, var(--accent-soft) 18%, #06100d);
-  --muted: color-mix(in srgb, var(--accent-soft) 15%, #4f5b58);
-  --ok: #047857;
-  --bad: #dc2626;
-  --edge: color-mix(in srgb, var(--mid) 28%, var(--paper));
-  --edge-2: color-mix(in srgb, var(--mid) 31%, var(--paper));
-  --edge-3: color-mix(in srgb, var(--mid) 34%, var(--paper));
-  --edge-4: color-mix(in srgb, var(--mid) 37%, var(--paper));
-  --drop: color-mix(in srgb, color-mix(in srgb, var(--accent-soft) 35%, #000) 45%, transparent);
-  --drop-hover: color-mix(in srgb, color-mix(in srgb, var(--accent-soft) 35%, #000) 50%, transparent);
-  --tile-a: var(--paper);
-  --tile-b: color-mix(in srgb, var(--mid) 8%, var(--paper));
-  --lattice: color-mix(in srgb, var(--mid) 4.5%, transparent);
-  --glow-1: color-mix(in srgb, var(--accent) 16%, transparent);
-  --glow-2: color-mix(in srgb, var(--accent-2) 12%, transparent);
-  --mark-opacity: 0.07;
-  --floor-line: color-mix(in srgb, var(--accent) 30%, transparent);
-  --floor-check: color-mix(in srgb, var(--accent-2) 10%, transparent);
-  --gridline: color-mix(in srgb, var(--mid) 16%, transparent);
-  --track: color-mix(in srgb, var(--mid) 14%, transparent);
-  --row-line: color-mix(in srgb, var(--mid) 10%, transparent);
-  --row-hover: color-mix(in srgb, var(--mid) 6%, transparent);
-  --cube-edge: color-mix(in srgb, var(--mid) 40%, transparent);
-  --cube-face: color-mix(in srgb, var(--paper) 55%, transparent);
-  --cube-top: color-mix(in srgb, var(--paper) 85%, transparent);
-  --cube-front: color-mix(in srgb, color-mix(in srgb, var(--accent) 35%, var(--paper)) 70%, transparent);
-  --cube-right: color-mix(in srgb, color-mix(in srgb, var(--accent-2) 55%, var(--paper)) 70%, transparent);
-  --sans: Inter, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
-  --mono: ui-monospace, SFMono-Regular, 'JetBrains Mono', Menlo, Consolas, monospace;
-
-  display: block;
-  min-height: 100vh;
-  position: relative;
-  overflow: hidden;
-  color: var(--text);
-  background:
-    radial-gradient(ellipse 80% 55% at 50% -10%, var(--glow-1), transparent 70%),
-    radial-gradient(ellipse 60% 40% at 100% 100%, var(--glow-2), transparent 70%),
-    linear-gradient(135deg, color-mix(in srgb, var(--accent) 9%, transparent), color-mix(in srgb, var(--accent-2) 9%, transparent)),
-    var(--bg);
-  font-family: var(--sans);
-  line-height: 1.5;
-}
-
-:host([data-mode='dark']) {
   --bg: color-mix(in srgb, var(--mid) 10%, #060a09);
   --surface: color-mix(in srgb, var(--mid) 12%, #0b1110);
   --border: color-mix(in srgb, var(--mid) 24%, transparent);
@@ -85,6 +36,21 @@
   --cube-top: color-mix(in srgb, var(--accent-soft) 32%, transparent);
   --cube-front: color-mix(in srgb, var(--accent) 38%, transparent);
   --cube-right: color-mix(in srgb, var(--accent-2) 50%, transparent);
+  --sans: Inter, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  --mono: ui-monospace, SFMono-Regular, 'JetBrains Mono', Menlo, Consolas, monospace;
+
+  display: block;
+  min-height: 100vh;
+  position: relative;
+  overflow: hidden;
+  color: var(--text);
+  background:
+    radial-gradient(ellipse 80% 55% at 50% -10%, var(--glow-1), transparent 70%),
+    radial-gradient(ellipse 60% 40% at 100% 100%, var(--glow-2), transparent 70%),
+    linear-gradient(135deg, color-mix(in srgb, var(--accent) 9%, transparent), color-mix(in srgb, var(--accent-2) 9%, transparent)),
+    var(--bg);
+  font-family: var(--sans);
+  line-height: 1.5;
 }
 
 /* ---------- background ---------- */
@@ -242,11 +208,11 @@ h1 { margin: 0; font-size: clamp(1.75rem, 4vw, 2.5rem); font-weight: 650; letter
   height: 26px;
   border-radius: 50%;
   background: var(--dot);
-  box-shadow: var(--inset, inset 0 0 0 0 transparent), 0 0 0 2px var(--tile-a), 0 0 0 3px var(--border), 0 6px 10px -4px var(--drop);
+  box-shadow: 0 0 0 2px var(--tile-a), 0 0 0 3px var(--border), 0 6px 10px -4px var(--drop);
   transition: transform 0.15s, box-shadow 0.15s;
 }
 .swatch:hover span { transform: translateY(-2px) scale(1.08); }
-.swatch input:checked + span { box-shadow: var(--inset, inset 0 0 0 0 transparent), 0 0 0 2px var(--tile-a), 0 0 0 4px var(--text), 0 6px 10px -4px var(--drop); }
+.swatch input:checked + span { box-shadow: 0 0 0 2px var(--tile-a), 0 0 0 4px var(--text), 0 6px 10px -4px var(--drop); }
 .swatch input:focus-visible + span { outline: 2px solid var(--accent); outline-offset: 5px; }
 
 /* ---------- stat tiles ---------- */

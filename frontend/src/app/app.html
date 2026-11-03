@@ -59,7 +59,7 @@
     <p class="themes-label" id="themes-label">Theme<b>{{ current().name }}</b></p>
     <fieldset class="swatches" aria-labelledby="themes-label">
       @for (t of themes; track t.id) {
-        <label class="swatch" [title]="t.name" [style.--dot]="dot(t)" [style.--inset]="t.dark ? 'inset 0 0 0 3px #0a100e' : null">
+        <label class="swatch" [title]="t.name" [style.--dot]="dot(t)">
           <input type="radio" name="theme" [value]="t.id" [attr.aria-label]="t.name" [checked]="t.id === themeId()" (change)="pick(t.id)" />
           <span></span>
         </label>

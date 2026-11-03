@@ -59,7 +59,7 @@ describe('App', () => {
     expect(row.textContent).toContain('live');
   });
 
-  it('offers 20 themes and switches between them', () => {
+  it('offers 20 dark themes and switches between them', () => {
     const fixture = TestBed.createComponent(App);
     fixture.detectChanges();
     const host = fixture.nativeElement as HTMLElement;
@@ -69,11 +69,11 @@ describe('App', () => {
     expect(radios.filter((r) => r.checked).length).toBe(1);
     expect(host.style.getPropertyValue('--accent')).toBe('#10b981');
 
-    const midnight = radios.find((r) => r.value === 'midnight') as HTMLInputElement;
-    midnight.click();
+    const sunset = radios.find((r) => r.value === 'sunset') as HTMLInputElement;
+    sunset.click();
     fixture.detectChanges();
-    expect(host.getAttribute('data-mode')).toBe('dark');
-    expect(host.style.getPropertyValue('--accent')).toBe('#6366f1');
-    expect(midnight.checked).toBe(true);
+    expect(host.style.getPropertyValue('--accent')).toBe('#f97316');
+    expect(host.style.getPropertyValue('--accent-2')).toBe('#ec4899');
+    expect(sunset.checked).toBe(true);
   });
 });
