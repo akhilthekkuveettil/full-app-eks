@@ -54,8 +54,26 @@ describe('App', () => {
     await tick();
     fixture.detectChanges();
 
-    const row = fixture.nativeElement.querySelector('tbody tr') as HTMLElement;
+    const row = fixture.nativeElement.querySelector('.history tbody tr') as HTMLElement;
     expect(row.textContent).toContain('backend2');
     expect(row.textContent).toContain('live');
+  });
+
+  it('offers 20 themes and switches between them', () => {
+    const fixture = TestBed.createComponent(App);
+    fixture.detectChanges();
+    const host = fixture.nativeElement as HTMLElement;
+    const radios = Array.from<HTMLInputElement>(host.querySelectorAll('.swatch input'));
+
+    expect(radios.length).toBe(20);
+    expect(radios.filter((r) => r.checked).length).toBe(1);
+    expect(host.style.getPropertyValue('--accent')).toBe('#10b981');
+
+    const midnight = radios.find((r) => r.value === 'midnight') as HTMLInputElement;
+    midnight.click();
+    fixture.detectChanges();
+    expect(host.getAttribute('data-mode')).toBe('dark');
+    expect(host.style.getPropertyValue('--accent')).toBe('#6366f1');
+    expect(midnight.checked).toBe(true);
   });
 });

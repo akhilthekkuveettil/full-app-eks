@@ -19,8 +19,7 @@
     <symbol id="k8s-logo" viewBox="0 0 100 100">
       <polygon
         points="50,4 85.96,21.32 94.84,60.23 69.96,91.45 30.04,91.45 5.16,60.23 14.04,21.32"
-        fill="#059669"
-        stroke="#059669"
+        style="fill: var(--accent-soft); stroke: var(--accent-soft)"
         stroke-width="6"
         stroke-linejoin="round"
       />
@@ -50,6 +49,18 @@
       {{ liveCount() }} of {{ backends().length }} services healthy
     </p>
   </header>
+
+  <div class="themes">
+    <p class="themes-label" id="themes-label">Theme<b>{{ current().name }}</b></p>
+    <fieldset class="swatches" aria-labelledby="themes-label">
+      @for (t of themes; track t.id) {
+        <label class="swatch" [title]="t.name" [style.--dot]="dot(t)">
+          <input type="radio" name="theme" [value]="t.id" [attr.aria-label]="t.name" [checked]="t.id === themeId()" (change)="pick(t.id)" />
+          <span></span>
+        </label>
+      }
+    </fieldset>
+  </div>
 
   <section class="stats" aria-label="Summary">
     <div class="tile">
@@ -133,7 +144,127 @@
     </svg>
   </section>
 
-  <section class="panel">
+  <section class="pies" aria-label="Share charts">
+    @for (p of pies(); track p.title) {
+      <section class="panel">
+        <h2>{{ p.title }}</h2>
+        <p class="hint">{{ p.sub }}</p>
+        <div class="pie-body">
+          <div class="pie-wrap">
+            <svg class="pie" viewBox="0 0 120 120" role="img" [attr.aria-label]="p.title" (pointerleave)="hideTip()">
+              <circle class="pie-track" cx="60" cy="60" r="46" />
+              @for (s of p.slices; track s.name) {
+                <path
+                  class="slice"
+                  [attr.d]="s.d"
+                  [attr.fill]="s.color"
+                  tabindex="0"
+                  (pointermove)="showTip($event, s.tip)"
+                  (focus)="showTip($event, s.tip)"
+                  (blur)="hideTip()"
+                />
+              }
+            </svg>
+            <p class="pie-center"><strong>{{ p.center.value }}</strong><span>{{ p.center.label }}</span></p>
+          </div>
+          <ul class="pie-legend">
+            @for (l of p.legend; track l.name) {
+              <li [style.--c]="l.color">
+                <span class="name">{{ l.name }}</span>
+                <span class="val">{{ l.text }}</span>
+                <span class="pct">{{ l.share }}%</span>
+              </li>
+            }
+          </ul>
+        </div>
+      </section>
+    }
+  </section>
+
+  <section class="candle-grid" aria-label="Response time candlesticks">
+    @for (c of candleCharts(); track c.name; let first = $first) {
+      <section class="panel candle-card" [class.wide]="first">
+        <div class="panel-head">
+          <h2>{{ first ? 'Response time candles' : c.name }}</h2>
+          @if (first) {
+            <ul class="legend candle-key">
+              <li class="k-fast">Faster</li>
+              <li class="k-slow">Slower</li>
+            </ul>
+            <span class="hint">30 s per candle</span>
+          } @else {
+            <span class="hint">{{ c.summary }}</span>
+          }
+        </div>
+        <div class="cplot">
+          <div class="yaxis" aria-hidden="true">
+            <div class="inner">
+              @for (t of c.ticks; track t.top) {
+                <span [style.top.%]="t.top">{{ t.label }}</span>
+              }
+            </div>
+          </div>
+          <div class="cbody" role="img" [attr.aria-label]="c.name + ' response time candlesticks'" (pointerleave)="hideTip()">
+            <div class="inner">
+              @for (t of c.ticks; track t.top) {
+                <i class="gridline" [style.top.%]="t.top"></i>
+              }
+              <div class="cols">
+                @for (cell of c.cells; track $index) {
+                  <div
+                    class="col"
+                    [attr.tabindex]="cell ? 0 : null"
+                    (pointermove)="cell && showTip($event, cell.tip)"
+                    (focus)="cell && showTip($event, cell.tip)"
+                    (blur)="hideTip()"
+                  >
+                    @if (cell) {
+                      <i class="wick" [attr.data-dir]="cell.dir" [style.top.%]="cell.wickTop" [style.height.%]="cell.wickH"></i>
+                      <i class="cbox" [attr.data-dir]="cell.dir" [style.top.%]="cell.bodyTop" [style.height.%]="cell.bodyH"></i>
+                    }
+                  </div>
+                }
+              </div>
+            </div>
+          </div>
+        </div>
+        <p class="xaxis"><span class="from" [style.grid-column]="c.start + 1 + ' / span 6'">{{ c.from }}</span><span class="to">{{ c.to }}</span></p>
+      </section>
+    }
+  </section>
+
+  <details class="panel table-view">
+    <summary>Candlestick table view</summary>
+    @if (candleTable().length === 0) {
+      <p class="hint">No candles yet.</p>
+    } @else {
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Time</th>
+              @for (c of candleCharts(); track c.name) {
+                <th>{{ c.name }}</th>
+              }
+            </tr>
+          </thead>
+          <tbody>
+            @for (row of candleTable(); track row.key) {
+              <tr>
+                <td>{{ row.t | date: 'mediumTime' }}</td>
+                @for (cell of row.cells; track $index) {
+                  <td>{{ cell }}</td>
+                }
+              </tr>
+            }
+          </tbody>
+        </table>
+      </div>
+      <p class="hint">open → close · low–high, in ms</p>
+    }
+  </details>
+
+  <section class="panel history">
     <h2>Recent checks</h2>
     @if (history().length === 0) {
       <p class="hint">No history yet.</p>
@@ -159,3 +290,18 @@
 
   <p class="hint footer">Refreshes every 5 seconds &middot; running on Kubernetes</p>
 </main>
+
+@if (tip(); as t) {
+  <div class="tooltip" role="tooltip" [style.left.px]="t.left" [style.top.px]="t.top">
+    <p class="tt-title">{{ t.tip.title }}</p>
+    @for (r of t.tip.rows; track r.label) {
+      <p class="tt-row">
+        @if (r.color) {
+          <i class="tt-key" [style.background]="r.color"></i>
+        }
+        <strong>{{ r.value }}</strong>
+        <span>{{ r.label }}</span>
+      </p>
+    }
+  </div>
+}
