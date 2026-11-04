@@ -1,6 +1,7 @@
-# Lets GitHub Actions log in to AWS without stored keys. Three roles, each trusted for one kind of workflow run:
+# Lets GitHub Actions log in to AWS without stored keys. Four roles, each trusted for one kind of workflow run:
 #   plan    pull requests            read-only, so a plan can never change anything
 #   images  pushes to the branch     push images to ECR only
+#   verify  pushes to the branch     only describes the cluster; Kubernetes read-only access comes from an EKS access entry (live/study/eks)
 #   infra   administrator for terragrunt apply (it creates IAM roles, EKS, RDS ...); the workflow only uses it on a manual run
 data "aws_caller_identity" "current" {}
 
@@ -24,6 +25,7 @@ locals {
   roles = {
     plan   = { subject = "pull_request", policy_arn = "arn:aws:iam::aws:policy/ReadOnlyAccess" }
     images = { subject = "ref:refs/heads/${var.branch}", policy_arn = null }
+    verify = { subject = "ref:refs/heads/${var.branch}", policy_arn = null }
     infra  = { subject = "ref:refs/heads/${var.branch}", policy_arn = "arn:aws:iam::aws:policy/AdministratorAccess" }
   }
 }
@@ -88,4 +90,17 @@ resource "aws_iam_role_policy" "images" {
   name   = "ecr-push"
   role   = aws_iam_role.this["images"].id
   policy = data.aws_iam_policy_document.images.json
+}
+
+data "aws_iam_policy_document" "verify" {
+  statement {
+    actions   = ["eks:DescribeCluster"]
+    resources = ["arn:aws:eks:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:cluster/*"]
+  }
+}
+
+resource "aws_iam_role_policy" "verify" {
+  name   = "eks-describe"
+  role   = aws_iam_role.this["verify"].id
+  policy = data.aws_iam_policy_document.verify.json
 }

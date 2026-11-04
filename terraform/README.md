@@ -29,7 +29,7 @@ Everything below can run from GitHub instead of your laptop (`.github/workflows/
 One-time setup, by hand (GitHub Actions cannot create its own login):
 
 ```bash
-cd terraform/live/bootstrap/github-oidc && terragrunt apply     # OIDC provider + roles app-github-{plan,images,infra}
+cd terraform/live/bootstrap/github-oidc && terragrunt apply     # OIDC provider + roles app-github-{plan,images,verify,infra}
 ```
 
 ## 0. Tools

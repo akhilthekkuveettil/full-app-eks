@@ -190,6 +190,8 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
+    outputs:
+      sha: ${{ steps.commit.outputs.sha }}
     steps:
       - uses: actions/checkout@v4
       - name: Write the new tag into kustomization.yaml
@@ -200,7 +202,95 @@ jobs:
           done
           git diff --stat
       - name: Commit
+        id: commit
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git diff --quiet || { git commit -am "chore: deploy images ${GITHUB_SHA::7}" && git pull --rebase && git push; }
+          if ! git diff --quiet; then
+            git commit -am "chore: deploy images ${GITHUB_SHA::7}"
+            git pull --rebase
+            git push
+            echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+          fi
+
+  verify:
+    # Did the rollout work? A bad image never takes traffic (maxUnavailable 0 + readiness probes) but Argo CD would
+    # just show Degraded. Only a clear "the release is bad" sets result=failed; login or kubectl problems fail this
+    # job instead, and then nothing is rolled back.
+    needs: release
+    if: needs.release.result == 'success' && needs.release.outputs.sha != ''
+    runs-on: ubuntu-latest
+    outputs:
+      result: ${{ steps.check.outputs.result }}
+    steps:
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::${{ env.ACCOUNT_ID }}:role/app-github-verify
+          aws-region: ${{ env.AWS_REGION }}
+      - name: Connect kubectl
+        run: |
+          aws eks update-kubeconfig --region "$AWS_REGION" --name "$CLUSTER"
+          kubectl -n app get deploy frontend
+      - name: Wait for the rollout and smoke test
+        id: check
+        run: |
+          tag=${GITHUB_SHA::7}
+          apps="backend1 backend2 backend3 backend4 frontend"
+          host=k8application.aryanconcretespares.in
+          fail() { echo "::error::$1"; echo "result=failed" >> "$GITHUB_OUTPUT"; exit 0; }
+
+          # Argo CD polls git about every 3 minutes: wait until every Deployment has the new image
+          synced() {
+            for a in $apps; do
+              img=$(kubectl -n app get deploy "$a" -o jsonpath='{.spec.template.spec.containers[0].image}') || return 1
+              [[ $img == *":$tag" ]] || return 1
+            done
+          }
+          deadline=$((SECONDS + 600))
+          until synced; do
+            [ "$SECONDS" -lt "$deadline" ] || fail "Argo CD did not apply $tag within 10 minutes"
+            sleep 15
+          done
+
+          # new pods Ready (and, for the frontend, healthy in the ALB), old pods gone
+          for a in $apps; do
+            kubectl -n app rollout status "deploy/$a" --timeout=300s || fail "rollout of $a did not finish"
+          done
+
+          # through the ALB, with the Host header, so DNS at GoDaddy plays no part
+          alb=$(kubectl -n app get ingress frontend -o jsonpath='{.status.loadBalancer.ingress[0].hostname}')
+          if [ -z "$alb" ]; then
+            echo "::warning::the Ingress has no ALB address yet, smoke test skipped"
+          else
+            for path in / /api/backend1/health /api/backend2/health /api/backend3/health /api/backend4/health; do
+              ok=no
+              for try in 1 2 3 4 5 6; do
+                curl -fsSk -o /dev/null --max-time 10 -H "Host: $host" "https://$alb$path" && { ok=yes; break; }
+                sleep 10
+              done
+              [ "$ok" = yes ] || fail "smoke test failed: $path"
+            done
+          fi
+          echo "result=ok" >> "$GITHUB_OUTPUT"
+
+  rollback:
+    # Undo the release commit: Argo CD then syncs the previous image tags. The bad code stays in master,
+    # so fix it forward (or revert the code commit) before the next release.
+    needs: [release, verify]
+    if: needs.verify.result == 'success' && needs.verify.outputs.result == 'failed'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Revert the release commit
+        env:
+          RELEASE_SHA: ${{ needs.release.outputs.sha }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git pull --rebase
+          git revert --no-edit "$RELEASE_SHA"
+          git push
+          echo "### Rolled back" >> "$GITHUB_STEP_SUMMARY"
+          echo "Release ${GITHUB_SHA::7} failed its rollout check. Reverted $RELEASE_SHA; Argo CD will restore the previous images." >> "$GITHUB_STEP_SUMMARY"

@@ -175,14 +175,13 @@ kubectl get ingress -A                   # both Ingresses show the same ALB addr
 
 ### B5. Point DNS at the load balancer
 
-In GoDaddy, add four CNAME records, both pointing to the ALB address from `kubectl get ingress -A`:
+In GoDaddy, add three CNAME records, all pointing to the ALB address from `kubectl get ingress -A`:
 
 | Name | Type | Value |
 |---|---|---|
 | `k8application` | CNAME | the ALB hostname |
 | `argocd` | CNAME | the same ALB hostname |
 | `monitoring` | CNAME | the same ALB hostname |
-| `dev` | CNAME | the same ALB hostname |
 
 The certificate is a wildcard, so no certificate change is needed. If the ALB is ever recreated its hostname changes; update both records.
 
@@ -215,9 +214,10 @@ Open `https://argocd.aryanconcretespares.in`, user `admin`. Change the password 
 ### 6.1 Identity and CI
 
 - **No stored AWS keys.** GitHub Actions logs in with short-lived OIDC tokens. Nothing secret is saved in GitHub.
-- **Three narrow roles**, each trusted for one kind of run, matched on the token's exact subject (including the numeric owner and repository IDs, so a renamed or recreated repository cannot take them over):
+- **Four narrow roles**, each trusted for one kind of run, matched on the token's exact subject (including the numeric owner and repository IDs, so a renamed or recreated repository cannot take them over):
   - `app-github-plan`: pull requests only, `ReadOnlyAccess`. A plan can never change anything.
   - `app-github-images`: pushes to `master` only, ECR push to `app/*` and nothing else.
+  - `app-github-verify`: pushes to `master` only, `eks:DescribeCluster` plus Kubernetes read-only (EKS access entry). Used by the `verify` job to check a rollout; the `rollback` job needs no AWS access.
   - `app-github-infra`: `master` only, administrator. The workflow uses it only on a manual "Run workflow".
 - **Infrastructure applies only on a manual click.** GitHub's required-reviewer gate is not available for private repositories on the Free plan, so the trigger itself is the approval.
 - **The role definitions live outside the stack the pipeline applies** (`live/bootstrap`), so a pipeline run cannot rewrite its own permissions.

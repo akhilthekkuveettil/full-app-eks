@@ -29,6 +29,10 @@ inputs = {
   # kubectl from the laptop; the CI role is admin already because it created the cluster
   admin_principal_arns = ["arn:aws:iam::065148239770:user/admin"]
 
-  # developers: read-only on the whole cluster
-  viewer_principal_arns = ["arn:aws:iam::065148239770:user/dev-viewer"]
+  # read-only on the whole cluster: developers, and the pipeline role that checks a rollout after each deploy
+  # (that role comes from terraform/live/bootstrap/github-oidc, which must be applied first)
+  viewer_principal_arns = [
+    "arn:aws:iam::065148239770:user/dev-viewer",
+    "arn:aws:iam::065148239770:role/app-github-verify",
+  ]
 }
