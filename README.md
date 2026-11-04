@@ -50,7 +50,7 @@ browser ──> nginx (frontend) ──/api/backend1..4──> FastAPI backend1.
 ### Steps
 
 ```bash
-git clone git@github.com:akhilthekkuveettil/full-app-eks.git
+git clone git@github.com:<your-github-user>/full-app-eks.git
 cd full-app-eks
 
 docker compose up -d --build      # first build takes a few minutes (npm install, pip install)
@@ -125,18 +125,16 @@ done. The cost table is in [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md#monthly-cost)
 
 ### 2. Make it yours (once)
 
-The repository is set up for one account and domain. Search for these values and replace them with yours:
+The repository ships with the values of the original author's account, domain and repository. Replace them with yours
+before the first run. Find each one with the command in the right-hand column:
 
-```bash
-grep -rn "065148239770\|aryanconcretespares\|akhilthekkuveettil" \
-  --exclude-dir=node_modules --exclude-dir=.git --exclude-dir=dist .
-```
+| Value | Where it is | Find it with |
+|---|---|---|
+| AWS account id (12 digits) | `scripts/common.sh` (`EXPECTED_ACCOUNT`), `kubernetes/kustomization.yaml`, `.github/workflows/deploy.yml`, `terraform/live/study/eks/terragrunt.hcl` | `grep -rnE "[0-9]{12}" scripts kubernetes .github terraform/live` |
+| Host names (`k8application.`, `argocd.`, `monitoring.`) and the ACM certificate ARN | `kubernetes/ingress.yaml`, `argocd/values.yaml`, `monitoring/values.yaml` | `grep -rnE "k8application\.|argocd\.[a-z]+\.|certificate-arn|arn:aws:acm" kubernetes argocd monitoring` |
+| GitHub repository (`<owner>/full-app-eks`) and its numeric owner and repository ids | `argocd/application.yaml`, `terraform/live/bootstrap/github-oidc/terragrunt.hcl` | `grep -rn "github.com\|github_owner_id\|github_repo" argocd terraform/live/bootstrap` |
 
-| Value | Where |
-|---|---|
-| AWS account id `065148239770` | `scripts/common.sh` (`EXPECTED_ACCOUNT`), `kubernetes/kustomization.yaml`, `.github/workflows/deploy.yml`, `terraform/live/study/eks/terragrunt.hcl` |
-| Host names (`k8application.`, `argocd.`, `monitoring.`) and the ACM certificate ARN | `kubernetes/ingress.yaml`, `argocd/values.yaml`, `monitoring/values.yaml` |
-| GitHub repository `akhilthekkuveettil/full-app-eks` | `argocd/application.yaml`, `terraform/live/bootstrap/github-oidc/terragrunt.hcl` (plus its two numeric ids) |
+Use `<your-account-id>`, `<your-domain>` and `<your-github-user>` in the steps below as your own values.
 
 ### 3. Create everything with one command
 
